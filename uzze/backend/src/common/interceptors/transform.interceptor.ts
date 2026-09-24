@@ -7,18 +7,26 @@ import {
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
-export interface Response<T> {
-  data: T;
-}
-
 @Injectable()
 export class TransformInterceptor<T>
-  implements NestInterceptor<T, Response<T>>
+  implements NestInterceptor<T, T | { data: T }>
 {
   intercept(
     context: ExecutionContext,
     next: CallHandler,
-  ): Observable<Response<T>> {
-    return next.handle().pipe(map((data) => ({ data })));
+  ): Observable<T | { data: T }> {
+    return next.handle().pipe(
+      map((data) => {
+        if (
+          data !== null &&
+          typeof data === 'object' &&
+          'data' in data &&
+          'meta' in data
+        ) {
+          return data;
+        }
+        return { data };
+      }),
+    );
   }
 }
