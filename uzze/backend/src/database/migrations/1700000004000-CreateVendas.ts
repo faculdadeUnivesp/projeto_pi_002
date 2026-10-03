@@ -1,7 +1,7 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateVendas1700000001000 implements MigrationInterface {
-  name = 'CreateVendas1700000001000';
+export class CreateVendas1700000004000 implements MigrationInterface {
+  name = 'CreateVendas1700000004000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -26,19 +26,26 @@ export class CreateVendas1700000001000 implements MigrationInterface {
 
     await queryRunner.query(`
       CREATE TABLE itens_venda (
-        id CHAR(36) NOT NULL,
-        venda_id CHAR(36) NOT NULL,
-        produto_id CHAR(36) NOT NULL,
-        quantidade INT NOT NULL,
-        valor_unitario DECIMAL(10,2) NOT NULL,
-        PRIMARY KEY (id),
-        CONSTRAINT FK_itens_venda_venda
-          FOREIGN KEY (venda_id)
-          REFERENCES vendas(id)
-          ON DELETE CASCADE
-          ON UPDATE CASCADE
-      )
-    `);
+       id CHAR(36) NOT NULL,
+       venda_id CHAR(36) NOT NULL,
+       produto_id CHAR(36) NOT NULL,
+       quantidade INT NOT NULL,
+       valor_unitario DECIMAL(10,2) NOT NULL,
+       PRIMARY KEY (id),
+
+       CONSTRAINT FK_itens_venda_venda
+         FOREIGN KEY (venda_id)
+         REFERENCES vendas(id)
+         ON DELETE CASCADE
+         ON UPDATE CASCADE,
+
+       CONSTRAINT FK_itens_venda_produto
+         FOREIGN KEY (produto_id)
+         REFERENCES produtos(id)
+         ON DELETE RESTRICT
+         ON UPDATE CASCADE
+     )
+   `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

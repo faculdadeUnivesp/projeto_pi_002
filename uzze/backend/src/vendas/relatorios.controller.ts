@@ -16,12 +16,23 @@ export class RelatoriosController {
   ) {}
 
   @Get('vendas')
-  async relatorioVendas(
+  relatorioVendas(
     @Query() dados: RelatorioVendasDto,
   ) {
     return this.vendasService.relatorioVendas(
       dados.dataInicio,
       dados.dataFim,
+    );
+  }
+
+  @Get('estoque-baixo')
+  relatorioEstoqueBaixo(
+    @Query('limite') limite = '5',
+    @Query('page') page = '1',
+  ) {
+    return this.vendasService.relatorioEstoqueBaixo(
+      Number(limite),
+      Number(page),
     );
   }
 }
