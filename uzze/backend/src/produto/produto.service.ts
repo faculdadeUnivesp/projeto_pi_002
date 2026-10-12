@@ -18,6 +18,9 @@ import { Fornecedor } from '../fornecedores/entities/fornecedor.entity.js';
 
 import { CreateProdutoDto } from './dto/create-produto.dto.js';
 import { UpdateProdutoDto } from './dto/update-produto.dto.js';
+import { ListProdutoQueryDto } from './dto/list-produto-query.dto.js';
+
+import { PaginatedProdutoResponse } from './interfaces/paginated-produto.interface.js'
 
 import {
   Produto,
@@ -97,17 +100,163 @@ export class ProdutoService {
     }
   }
 
-  async findAll(): Promise<Produto[]> {
-    return this.produtoRepository.find({
-      relations: {
-        fornecedor: true,
-      },
+async findAll(
+  filtros: ListProdutoQueryDto,
+): Promise<PaginatedProdutoResponse> {
+  const {
+    page = 1,
+    limit = 10,
+    busca,
+    categoria,
+    material,
+    tamanho,
+    genero,
+    modelo,
+    fornecedor_id,
+    status,
+    valor_min,
+    valor_max,
+  } = filtros;
 
-      order: {
-        nome: 'ASC',
+  const query =
+    this.produtoRepository
+      .createQueryBuilder('produto')
+      .leftJoinAndSelect(
+        'produto.fornecedor',
+        'fornecedor',
+      );
+
+  if (busca) {
+    query.andWhere(
+      `(
+        produto.nome LIKE :busca
+        OR produto.categoria LIKE :busca
+        OR produto.material LIKE :busca
+        OR produto.modelo LIKE :busca
+      )`,
+      {
+        busca: `%${busca}%`,
       },
-    });
+    );
   }
+
+  if (categoria) {
+    query.andWhere(
+      'produto.categoria = :categoria',
+      {
+        categoria,
+      },
+    );
+  }
+
+  if (material) {
+    query.andWhere(
+      'produto.material = :material',
+      {
+        material,
+      },
+    );
+  }
+
+  if (tamanho) {
+    query.andWhere(
+      'produto.tamanho = :tamanho',
+      {
+        tamanho,
+      },
+    );
+  }
+
+  if (genero) {
+    query.andWhere(
+      'produto.genero = :genero',
+      {
+        genero,
+      },
+    );
+  }
+
+  if (modelo) {
+    query.andWhere(
+      'produto.modelo = :modelo',
+      {
+        modelo,
+      },
+    );
+  }
+
+  if (fornecedor_id) {
+    query.andWhere(
+      'produto.fornecedor_id = :fornecedor_id',
+      {
+        fornecedor_id,
+      },
+    );
+  }
+
+  if (status) {
+    query.andWhere(
+      'produto.status = :status',
+      {
+        status,
+      },
+    );
+  }
+
+  if (valor_min !== undefined) {
+  query.andWhere(
+    'produto.valor >= :valor_min',
+    {
+      valor_min,
+    },
+  );
+}
+
+ if (valor_max !== undefined) {
+  query.andWhere(
+    'produto.valor <= :valor_max',
+    {
+      valor_max,
+    },
+  );
+}
+
+  query
+    .orderBy(
+      'produto.nome',
+      'ASC',
+    )
+    .skip(
+      (page - 1) * limit,
+    )
+    .take(limit);
+
+  const [
+    produtos,
+    total,
+  ] = await query.getManyAndCount();
+
+  const totalPages =
+    Math.ceil(total / limit);
+
+  return {
+    data: produtos,
+
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages,
+
+      hasNextPage:
+        page < totalPages,
+
+      hasPreviousPage:
+        page > 1,
+    },
+  };
+  
+}
 
   async findOne(
     id: string,

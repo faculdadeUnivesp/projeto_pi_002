@@ -5,6 +5,12 @@ import { NotFound } from '../pages/NotFound';
 import { PrivateRoute } from './PrivateRoute';
 import { Layout } from '../components/common/Layout';
 
+import { Fornecedores } from '../pages/Fornecedores';
+import { CadastroFornecedores } from '../pages/CadastroFornecedores';
+
+import { Estoque } from '../pages/Estoque';
+import { CadastroEstoque } from '../pages/CadastroEstoque';
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -13,10 +19,20 @@ export function AppRoutes() {
       <Route element={<PrivateRoute />}>
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
+
+          <Route path="/fornecedores" element={<Fornecedores />} />
+          <Route path="/fornecedores/cadastrar" element={<CadastroFornecedores />} />
+          <Route path="/fornecedores/:id/editar" element={<CadastroFornecedores />} />
+
+          <Route path="/estoque" element={<Estoque />} />
+          <Route path="/estoque/cadastrar" element={<CadastroEstoque />} />
+          <Route path="/estoque/:id/editar" element={<CadastroEstoque />} />
+          
         </Route>
       </Route>
 
       <Route path="*" element={<NotFound />} />
     </Routes>
+
   );
 }

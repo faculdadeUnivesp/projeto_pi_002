@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -33,6 +34,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 import { CreateProdutoDto } from './dto/create-produto.dto.js';
 import { UpdateProdutoDto } from './dto/update-produto.dto.js';
+import { ListProdutoQueryDto } from './dto/list-produto-query.dto.js';
 
 import { ProdutoService } from './produto.service.js';
 
@@ -137,22 +139,27 @@ export class ProdutoController {
   }
 
   @Get()
-  findAll() {
-    return this.produtoService.findAll();
-  }
+findAll(
+  @Query()
+  query: ListProdutoQueryDto,
+) {
+  return this.produtoService.findAll(
+    query,
+  );
+}
 
-  @Get(':id')
-  findOne(
-    @Param(
-      'id',
-      ParseUUIDPipe,
-    )
-    id: string,
-  ) {
-    return this.produtoService.findOne(
-      id,
-    );
-  }
+@Get(':id')
+findOne(
+  @Param(
+    'id',
+    ParseUUIDPipe,
+  )
+  id: string,
+) {
+  return this.produtoService.findOne(
+    id,
+  );
+}
 
   @Patch(':id')
   @UseInterceptors(
