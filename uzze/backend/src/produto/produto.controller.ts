@@ -38,7 +38,7 @@ import { ListProdutoQueryDto } from './dto/list-produto-query.dto.js';
 
 import { ProdutoService } from './produto.service.js';
 
-import { UploadedFile as ProdutoUploadedFile } from './types/uploaded-file.type.js';
+import type { UploadedFile as ProdutoUploadedFile } from './types/uploaded-file.type.js';
 
 const pastaProdutos =
   './uploads/produtos';
