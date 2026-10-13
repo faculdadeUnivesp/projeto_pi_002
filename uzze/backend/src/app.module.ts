@@ -5,6 +5,7 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { UsuariosModule } from './usuarios/usuarios.module.js';
+import { VendasModule } from './vendas/vendas.module.js';
 import { FornecedoresModule } from './fornecedores/fornecedor.module.js';
 import { ProdutoModule } from './produto/produto.module.js';
 
@@ -23,6 +24,7 @@ import { ProdutoModule } from './produto/produto.module.js';
     }),
     AuthModule,
     UsuariosModule,
+    VendasModule,
     FornecedoresModule,
     ProdutoModule,
   ],
