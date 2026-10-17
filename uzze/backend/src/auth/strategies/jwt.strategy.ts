@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UsuariosService } from '../../usuarios/usuarios.service.js';
+import { UsuarioStatus } from '../../usuarios/entities/usuario.entity.js';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -9,7 +10,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'uzze-jwt-secret',
+      secretOrKey: process.env.JWT_SECRET as string,
     });
   }
 
@@ -18,6 +19,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!usuario) {
       throw new UnauthorizedException('Usuário não encontrado');
     }
-    return { id: usuario.id, email: usuario.email, tipo: usuario.tipo };
+    if (usuario.status === UsuarioStatus.INATIVO) {
+      throw new UnauthorizedException('Conta inativa');
+    }
+    return {
+      id: usuario.id,
+      email: usuario.email,
+      nome: usuario.nome,
+      tipo: usuario.tipo,
+      status: usuario.status,
+    };
   }
 }
