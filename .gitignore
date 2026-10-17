@@ -4,3 +4,7 @@ dist/
 *.log
 uploads/
 .env
+
+# UZZE-specific
+uzze/uzze-html-css/
+
