@@ -1,7 +1,12 @@
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { Usuario, UsuarioTipo, UsuarioStatus } from '../../usuarios/entities/usuario.entity.js';
 import 'dotenv/config';
+
+function gerarSenhaAleatoria(tamanho = 16): string {
+  return randomBytes(tamanho).toString('base64url');
+}
 
 async function seed() {
   const dataSource = new DataSource({
@@ -25,7 +30,8 @@ async function seed() {
   });
 
   if (!existingAdmin) {
-    const senhaHash = await bcrypt.hash('admin123', 10);
+    const senha = gerarSenhaAleatoria();
+    const senhaHash = await bcrypt.hash(senha, 10);
     const admin = usuarioRepository.create({
       nome: 'Administrador',
       cpf: '000.000.000-00',
@@ -35,7 +41,13 @@ async function seed() {
       status: UsuarioStatus.ATIVO,
     });
     await usuarioRepository.save(admin);
+
+    console.log('========================================');
     console.log('Admin user created successfully!');
+    console.log('  CPF:    000.000.000-00');
+    console.log(`  Senha:  ${senha}`);
+    console.log('  (Guarde esta senha — ela não será mostrada novamente)');
+    console.log('========================================');
   } else {
     console.log('Admin user already exists.');
   }

@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -17,7 +19,8 @@ import {
 import { ItemVenda } from './entities/item-venda.entity.js';
 import { CreateVendaDto } from './dto/create-venda.dto.js';
 import { UsuarioTipo } from '../usuarios/entities/usuario.entity.js';
-import { Produto } from '../produto/entities/produto.entity.js';
+import { Produto, ProdutoStatus } from '../produto/entities/produto.entity.js';
+import { buildMeta } from '../common/pagination.js';
 
 @Injectable()
 export class VendasService {
@@ -88,12 +91,13 @@ export class VendasService {
       let proximoNumero = 1;
 
       if (ultimaVenda) {
-        const partes = ultimaVenda.numero_venda.split('-');
-        const numero = Number(partes[1]);
-
-        if (Number.isInteger(numero)) {
-          proximoNumero = numero + 1;
+        const match = /^(\d{4})-(\d+)$/.exec(ultimaVenda.numero_venda);
+        if (!match) {
+          throw new InternalServerErrorException(
+            `numero_venda corrompido: ${ultimaVenda.numero_venda}`,
+          );
         }
+        proximoNumero = Number(match[2]) + 1;
       }
 
       const anoAtual = new Date().getFullYear();
@@ -171,7 +175,10 @@ export class VendasService {
 
       await queryRunner.commitTransaction();
 
-      return vendaSalva;
+      return queryRunner.manager.getRepository(Venda).findOneOrFail({
+        where: { id: vendaSalva.id },
+        relations: { itens: true },
+      });
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -186,7 +193,14 @@ export class VendasService {
     }
   }
 
-  async listar(page = 1, limit = 10, data?: string) {
+  async listar(
+    page = 1,
+    limit = 10,
+    data?: string,
+    options: { vendedorId?: string; isAdmin: boolean } = {
+      isAdmin: true,
+    },
+  ) {
     const query = this.vendaRepository
       .createQueryBuilder('venda')
       .select([
@@ -202,6 +216,12 @@ export class VendasService {
       .orderBy('venda.data', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
+
+    if (!options.isAdmin && options.vendedorId) {
+      query.andWhere('venda.vendedor_id = :vendedorId', {
+        vendedorId: options.vendedorId,
+      });
+    }
 
     if (data) {
       query.andWhere('DATE(venda.data) = :data', {
@@ -223,15 +243,16 @@ export class VendasService {
         status: venda.status,
         created_at: venda.created_at,
       })),
-      meta: {
-        total,
-        page,
-        limit,
-      },
+      meta: buildMeta(total, page, limit),
     };
   }
 
-  async buscarPorId(id: string) {
+  async buscarPorId(
+    id: string,
+    options: { vendedorId?: string; isAdmin: boolean } = {
+      isAdmin: true,
+    },
+  ) {
     const venda = await this.vendaRepository.findOne({
       where: { id },
       relations: {
@@ -245,24 +266,28 @@ export class VendasService {
       );
     }
 
+    if (!options.isAdmin && venda.vendedor_id !== options.vendedorId) {
+      throw new ForbiddenException(
+        'Você não tem permissão para visualizar esta venda',
+      );
+    }
+
     return {
-      data: {
-        id: venda.id,
-        numero_venda: venda.numero_venda,
-        data: venda.data,
-        forma_pagamento: venda.forma_pagamento,
-        vendedor_id: venda.vendedor_id,
-        total: Number(venda.total),
-        status: venda.status,
-        itens: venda.itens.map((item) => ({
-          id: item.id,
-          produto_id: item.produto_id,
-          quantidade: item.quantidade,
-          valor_unitario: Number(
-            item.valor_unitario,
-          ),
-        })),
-      },
+      id: venda.id,
+      numero_venda: venda.numero_venda,
+      data: venda.data,
+      forma_pagamento: venda.forma_pagamento,
+      vendedor_id: venda.vendedor_id,
+      total: Number(venda.total),
+      status: venda.status,
+      itens: venda.itens.map((item) => ({
+        id: item.id,
+        produto_id: item.produto_id,
+        quantidade: item.quantidade,
+        valor_unitario: Number(
+          item.valor_unitario,
+        ),
+      })),
     };
   }
 
@@ -306,7 +331,7 @@ export class VendasService {
         venda.vendedor_id === usuarioId;
 
       if (!ehAdmin && !ehVendedor) {
-        throw new ConflictException(
+        throw new ForbiddenException(
           'Você não tem permissão para cancelar esta venda',
         );
       }
@@ -369,25 +394,26 @@ export class VendasService {
     })
     .getRawOne();
 
-  const totalProdutos =
-    await this.produtoRepository.count();
+  const totalProdutos = await this.produtoRepository.count({
+    where: { status: ProdutoStatus.ATIVO },
+  });
 
-  const estoqueBaixo =
-    await this.produtoRepository
-      .createQueryBuilder('produto')
-      .where('produto.quantidade <= :limite', {
-        limite: 5,
-      })
-      .getCount();
+  const estoqueBaixo = await this.produtoRepository
+    .createQueryBuilder('produto')
+    .where('produto.quantidade <= :limite', {
+      limite: 5,
+    })
+    .andWhere('produto.status = :status', {
+      status: ProdutoStatus.ATIVO,
+    })
+    .getCount();
 
   return {
     vendas_hoje: {
      quantidade: Number(
        vendasHoje?.quantidade ?? 0,
      ),
-     total: Number(
-       Number(vendasHoje?.total ?? 0).toFixed(2),
-     ),
+     total: Math.round(Number(vendasHoje?.total ?? 0) * 100) / 100,
    },
    total_produtos: totalProdutos,
    estoque_baixo: estoqueBaixo,
@@ -416,6 +442,7 @@ async relatorioEstoqueBaixo(
     await this.produtoRepository.findAndCount({
       where: {
         quantidade: LessThanOrEqual(limite),
+        status: ProdutoStatus.ATIVO,
       },
       relations: {
         fornecedor: true,
@@ -433,13 +460,9 @@ async relatorioEstoqueBaixo(
       nome: produto.nome,
       tamanho: produto.tamanho,
       quantidade: produto.quantidade,
-      fornecedor: produto.fornecedor.nome,
+      fornecedor: produto.fornecedor?.nome ?? '—',
     })),
-    meta: {
-      total,
-      page,
-      limit: quantidadePorPagina,
-    },
+    meta: buildMeta(total, page, quantidadePorPagina),
   };
 }
 
@@ -505,27 +528,25 @@ async relatorioEstoqueBaixo(
     );
 
     return {
-      data: {
-        periodo: {
-          inicio: dataInicio,
-          fim: dataFim,
-        },
-        total_vendas: totalVendas,
-        total_faturado: Number(
-          totalFaturado.toFixed(2),
-        ),
-        vendas_por_dia: vendas.map(
-          (venda) => ({
-            data: venda.data,
-            quantidade: Number(
-              venda.quantidade,
-            ),
-            total: Number(
-              Number(venda.total).toFixed(2),
-            ),
-          }),
-        ),
+      periodo: {
+        inicio: dataInicio,
+        fim: dataFim,
       },
+      total_vendas: totalVendas,
+      total_faturado: Number(
+        totalFaturado.toFixed(2),
+      ),
+      vendas_por_dia: vendas.map(
+        (venda) => ({
+          data: venda.data,
+          quantidade: Number(
+            venda.quantidade,
+          ),
+          total: Number(
+            Number(venda.total).toFixed(2),
+          ),
+        }),
+      ),
     };
   }
 }
