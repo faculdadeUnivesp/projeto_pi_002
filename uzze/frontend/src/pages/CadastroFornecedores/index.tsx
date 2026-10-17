@@ -3,11 +3,17 @@ import type { FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import api from '../../services/api';
-import './CadastroFornecedores.css';
+import { IconCheck } from '../../components/common/Icons';
+import {
+  formatCep,
+  formatCnpj,
+  formatContato,
+} from '../../utils/formatters';
 
 interface EnderecoForm {
   cep: string;
   rua: string;
+  numero: string;
   bairro: string;
   cidade: string;
   estado: string;
@@ -40,6 +46,7 @@ const formularioInicial: FornecedorForm = {
   endereco: {
     cep: '',
     rua: '',
+    numero: '',
     bairro: '',
     cidade: '',
     estado: '',
@@ -68,17 +75,20 @@ export function CadastroFornecedores() {
         setCarregando(true);
         setErro('');
 
-        const response = await api.get<ApiResponse<FornecedorResponse>>(`/fornecedores/${id}`);
+        const response = await api.get<ApiResponse<FornecedorResponse>>(
+          `/fornecedores/${id}`,
+        );
         const fornecedor = response.data.data;
 
         setFormulario({
           nome: fornecedor.nome ?? '',
-          cnpj: formatarCnpj(fornecedor.cnpj ?? ''),
+          cnpj: formatCnpj(fornecedor.cnpj ?? ''),
           email: fornecedor.email ?? '',
-          contato: formatarContato(fornecedor.contato ?? ''),
+          contato: formatContato(fornecedor.contato ?? ''),
           endereco: {
-            cep: formatarCep(fornecedor.endereco?.cep ?? ''),
+            cep: formatCep(fornecedor.endereco?.cep ?? ''),
             rua: fornecedor.endereco?.rua ?? '',
+            numero: fornecedor.endereco?.numero ?? '',
             bairro: fornecedor.endereco?.bairro ?? '',
             cidade: fornecedor.endereco?.cidade ?? '',
             estado: fornecedor.endereco?.estado ?? '',
@@ -99,11 +109,14 @@ export function CadastroFornecedores() {
     carregarFornecedor();
   }, [id]);
 
-  const alterarCampo = (campo: 'nome' | 'cnpj' | 'email' | 'contato', valor: string) => {
+  const alterarCampo = (
+    campo: 'nome' | 'cnpj' | 'email' | 'contato',
+    valor: string,
+  ) => {
     let valorFormatado = valor;
 
-    if (campo === 'cnpj') valorFormatado = formatarCnpj(valor);
-    if (campo === 'contato') valorFormatado = formatarContato(valor);
+    if (campo === 'cnpj') valorFormatado = formatCnpj(valor);
+    if (campo === 'contato') valorFormatado = formatContato(valor);
 
     setFormulario((anterior) => ({
       ...anterior,
@@ -114,7 +127,7 @@ export function CadastroFornecedores() {
   const alterarEndereco = (campo: keyof EnderecoForm, valor: string) => {
     let valorFormatado = valor;
 
-    if (campo === 'cep') valorFormatado = formatarCep(valor);
+    if (campo === 'cep') valorFormatado = formatCep(valor);
 
     setFormulario((anterior) => ({
       ...anterior,
@@ -125,37 +138,36 @@ export function CadastroFornecedores() {
     }));
   };
 
-  const consultarCep = async () => {
-    const cep = formulario.endereco.cep.replace(/\D/g, '');
-
-    if (cep.length !== 8) return;
-
-    /*
-      Aqui você pode integrar uma API de CEP futuramente.
-    */
-  };
-
   const validarFormulario = () => {
-    if (!formulario.nome.trim() || !formulario.cnpj.trim() || !formulario.email.trim() || !formulario.contato.trim()) {
-      return 'Preencha todos os dados obrigatórios do fornecedor.';
+    if (!formulario.nome.trim()) {
+      return 'Informe o nome do fornecedor.';
     }
 
     if (formulario.cnpj.replace(/\D/g, '').length !== 14) {
       return 'Informe um CNPJ válido.';
     }
 
-    if (formulario.endereco.cep.replace(/\D/g, '').length !== 8) {
-      return 'Informe um CEP válido.';
-    }
+    const enderecoPreenchido =
+      formulario.endereco.cep ||
+      formulario.endereco.rua ||
+      formulario.endereco.numero ||
+      formulario.endereco.bairro ||
+      formulario.endereco.cidade ||
+      formulario.endereco.estado;
 
-    if (
-      !formulario.endereco.rua.trim() ||
-      !formulario.endereco.bairro.trim() ||
-      !formulario.endereco.cidade.trim() ||
-      !formulario.endereco.estado.trim() ||
-      !formulario.endereco.pais.trim()
-    ) {
-      return 'Preencha os campos obrigatórios do endereço.';
+    if (enderecoPreenchido) {
+      if (formulario.endereco.cep.replace(/\D/g, '').length !== 8) {
+        return 'CEP inválido.';
+      }
+      if (
+        !formulario.endereco.rua.trim() ||
+        !formulario.endereco.numero.trim() ||
+        !formulario.endereco.bairro.trim() ||
+        !formulario.endereco.cidade.trim() ||
+        !formulario.endereco.estado.trim()
+      ) {
+        return 'Preencha os campos obrigatórios do endereço.';
+      }
     }
 
     return '';
@@ -175,21 +187,30 @@ export function CadastroFornecedores() {
       setSalvando(true);
       setErro('');
 
-      const payload = {
+      const trimOuVazio = (v: string) => v.trim() || undefined;
+
+      const e = formulario.endereco;
+      const enderecoPreenchido =
+        !!(e.cep || e.rua || e.numero || e.bairro || e.cidade || e.estado);
+
+      const payload: Record<string, unknown> = {
         nome: formulario.nome.trim(),
-        cnpj: formulario.cnpj.replace(/\D/g, ''),
-        email: formulario.email.trim().toLowerCase(),
-        contato: formulario.contato.replace(/\D/g, ''),
-        endereco: {
-          cep: formulario.endereco.cep.replace(/\D/g, ''),
-          rua: formulario.endereco.rua.trim(),
-          bairro: formulario.endereco.bairro.trim(),
-          cidade: formulario.endereco.cidade.trim(),
-          estado: formulario.endereco.estado.trim(),
-          pais: formulario.endereco.pais.trim(),
-          complemento: formulario.endereco.complemento.trim() || undefined,
-        },
+        cnpj: formulario.cnpj,
+        status,
+        email: trimOuVazio(formulario.email.toLowerCase()),
+        contato: trimOuVazio(formulario.contato),
       };
+
+      if (enderecoPreenchido) {
+        payload.cep = e.cep;
+        payload.rua = trimOuVazio(e.rua);
+        payload.numero = trimOuVazio(e.numero);
+        payload.bairro = trimOuVazio(e.bairro);
+        payload.cidade = trimOuVazio(e.cidade);
+        payload.estado = trimOuVazio(e.estado.toUpperCase());
+        payload.pais = trimOuVazio(e.pais);
+        payload.complemento = trimOuVazio(e.complemento);
+      }
 
       if (modoEdicao && id) {
         await api.patch(`/fornecedores/${id}`, payload);
@@ -198,10 +219,11 @@ export function CadastroFornecedores() {
       }
 
       navigate('/fornecedores');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
 
-      const mensagem = error.response?.data?.message;
+      const mensagem = (error as { response?: { data?: { message?: string } } })
+        .response?.data?.message;
 
       if (Array.isArray(mensagem)) {
         setErro(mensagem.join(' '));
@@ -214,135 +236,253 @@ export function CadastroFornecedores() {
   };
 
   if (carregando) {
-    return <div className="cadastro-fornecedor__carregando">Carregando fornecedor...</div>;
+    return <p className="empty">Carregando fornecedor...</p>;
   }
 
   return (
-    <section className="cadastro-fornecedor">
-      <form onSubmit={salvar}>
-        <div className="cadastro-fornecedor__topo">
-          <h1>{modoEdicao ? 'Editar Fornecedor' : 'Cadastro de Fornecedores'}</h1>
-
-          <button type="submit" className="cadastro-fornecedor__salvar" disabled={salvando}>
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M5 12.5 9.5 17 19 7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-
-            {salvando ? 'Salvando...' : 'Salvar'}
-          </button>
+    <>
+      <div className="page-head">
+        <div>
+          <h1>
+            {modoEdicao ? 'Editar Fornecedor' : 'Cadastro de Fornecedores'}
+          </h1>
         </div>
 
-        {erro && <div className="cadastro-fornecedor__erro">{erro}</div>}
+        <button
+          className="btn"
+          type="submit"
+          form="form-fornecedor"
+          disabled={salvando}
+        >
+          <IconCheck />
+          {salvando ? 'Salvando...' : 'Salvar'}
+        </button>
+      </div>
 
-        <div className="cadastro-fornecedor__card">
-          <h2>Dados do Fornecedor</h2>
+      <form id="form-fornecedor" onSubmit={salvar}>
+        {erro && <div className="alert alert--error">{erro}</div>}
 
-          <div className="cadastro-fornecedor__grid">
-            <div className="campo campo--metade">
+        <section className="card form-card">
+          <h2 className="lg">Dados do Fornecedor</h2>
+
+          <div className="grid c2">
+            <div className="field">
               <label htmlFor="nome">Nome</label>
-              <input id="nome" type="text" value={formulario.nome} onChange={(event) => alterarCampo('nome', event.target.value)} placeholder="Nome Fornecedor" maxLength={255} />
+              <input
+                className="input"
+                id="nome"
+                type="text"
+                placeholder="Nome Fornecedor"
+                maxLength={255}
+                value={formulario.nome}
+                onChange={(event) => alterarCampo('nome', event.target.value)}
+              />
             </div>
 
-            <div className="campo campo--metade">
+            <div className="field">
               <label htmlFor="cnpj">CNPJ</label>
-              <input id="cnpj" type="text" value={formulario.cnpj} onChange={(event) => alterarCampo('cnpj', event.target.value)} placeholder="00.000.000/0000-00" maxLength={18} />
+              <input
+                className="input"
+                id="cnpj"
+                type="text"
+                placeholder="00.000.000/0000-00"
+                maxLength={18}
+                value={formulario.cnpj}
+                onChange={(event) => alterarCampo('cnpj', event.target.value)}
+              />
             </div>
 
-            <div className="campo campo--metade">
+            <div className="field">
               <label htmlFor="email">E-mail</label>
-              <input id="email" type="email" value={formulario.email} onChange={(event) => alterarCampo('email', event.target.value)} placeholder="email@fornecedor.com" />
+              <input
+                className="input"
+                id="email"
+                type="email"
+                placeholder="email@fornecedor.com"
+                value={formulario.email}
+                onChange={(event) => alterarCampo('email', event.target.value)}
+              />
             </div>
 
-            <div className="cadastro-fornecedor__linha-contato">
-              <div className="campo">
+            <div className="grid c2" style={{ gap: 14 }}>
+              <div className="field">
                 <label htmlFor="contato">Contato</label>
-                <input id="contato" type="text" value={formulario.contato} onChange={(event) => alterarCampo('contato', event.target.value)} placeholder="(00) 00000-0000" maxLength={15} />
+                <input
+                  className="input"
+                  id="contato"
+                  type="text"
+                  placeholder="(00) 00000-0000"
+                  maxLength={15}
+                  value={formulario.contato}
+                  onChange={(event) =>
+                    alterarCampo('contato', event.target.value)
+                  }
+                />
               </div>
 
-              <div className="campo cadastro-fornecedor__status-campo">
-                <label>Status</label>
-
-                <div className="cadastro-fornecedor__status">
-                  <span className={`status-radio status-radio--${status}`} />
-                  <span className={status === 'ativo' ? 'status-texto--ativo' : 'status-texto--inativo'}>
-                    {status === 'ativo' ? 'Ativo' : 'Inativo'}
-                  </span>
+              <div className="field">
+                <span className="label-s">Status</span>
+                <div className="radios">
+                  <label className={status === 'ativo' ? 'on' : ''}>
+                    <input
+                      type="radio"
+                      name="status"
+                      value="ativo"
+                      checked={status === 'ativo'}
+                      onChange={() => setStatus('ativo')}
+                    />
+                    Ativo
+                  </label>
+                  <label className={status === 'inativo' ? 'offc' : ''}>
+                    <input
+                      type="radio"
+                      name="status"
+                      value="inativo"
+                      checked={status === 'inativo'}
+                      onChange={() => setStatus('inativo')}
+                    />
+                    Inativo
+                  </label>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="cadastro-fornecedor__card">
-          <h2>Endereço</h2>
+        <section className="card form-card">
+          <h2 className="lg">Endereço</h2>
 
-          <div className="cadastro-fornecedor__grid">
-            <div className="campo campo--metade">
+          <div className="grid c2">
+            <div className="field">
               <label htmlFor="cep">CEP</label>
-              <input id="cep" type="text" value={formulario.endereco.cep} onChange={(event) => alterarEndereco('cep', event.target.value)} onBlur={consultarCep} placeholder="00000-000" maxLength={9} />
+              <input
+                className="input"
+                id="cep"
+                type="text"
+                placeholder="00000-000"
+                maxLength={9}
+                value={formulario.endereco.cep}
+                onChange={(event) =>
+                  alterarEndereco('cep', event.target.value)
+                }
+              />
             </div>
 
-            <div className="campo campo--metade">
+            <div className="field">
               <label htmlFor="rua">Rua</label>
-              <input id="rua" type="text" value={formulario.endereco.rua} onChange={(event) => alterarEndereco('rua', event.target.value)} placeholder="Rua" />
+              <input
+                className="input"
+                id="rua"
+                type="text"
+                placeholder="Rua"
+                value={formulario.endereco.rua}
+                onChange={(event) =>
+                  alterarEndereco('rua', event.target.value)
+                }
+              />
             </div>
 
-            <div className="campo campo--metade">
+            <div className="field">
+              <label htmlFor="numero">Número</label>
+              <input
+                className="input"
+                id="numero"
+                type="text"
+                placeholder="Número"
+                maxLength={10}
+                value={formulario.endereco.numero}
+                onChange={(event) =>
+                  alterarEndereco('numero', event.target.value)
+                }
+              />
+            </div>
+
+            <div className="field">
               <label htmlFor="bairro">Bairro</label>
-              <input id="bairro" type="text" value={formulario.endereco.bairro} onChange={(event) => alterarEndereco('bairro', event.target.value)} placeholder="Bairro" />
+              <input
+                className="input"
+                id="bairro"
+                type="text"
+                placeholder="Bairro"
+                value={formulario.endereco.bairro}
+                onChange={(event) =>
+                  alterarEndereco('bairro', event.target.value)
+                }
+              />
             </div>
 
-            <div className="campo campo--metade">
+            <div className="field">
               <label htmlFor="cidade">Cidade</label>
-              <input id="cidade" type="text" value={formulario.endereco.cidade} onChange={(event) => alterarEndereco('cidade', event.target.value)} placeholder="Cidade" />
+              <input
+                className="input"
+                id="cidade"
+                type="text"
+                placeholder="Cidade"
+                value={formulario.endereco.cidade}
+                onChange={(event) =>
+                  alterarEndereco('cidade', event.target.value)
+                }
+              />
             </div>
 
-            <div className="campo campo--metade">
+            <div className="field">
               <label htmlFor="estado">Estado</label>
-              <input id="estado" type="text" value={formulario.endereco.estado} onChange={(event) => alterarEndereco('estado', event.target.value)} placeholder="Estado" />
+              <input
+                className="input"
+                id="estado"
+                type="text"
+                placeholder="Estado"
+                maxLength={2}
+                value={formulario.endereco.estado}
+                onChange={(event) =>
+                  alterarEndereco(
+                    'estado',
+                    event.target.value.toUpperCase(),
+                  )
+                }
+              />
             </div>
 
-            <div className="campo campo--metade">
+            <div className="field">
               <label htmlFor="pais">País</label>
-              <input id="pais" type="text" value={formulario.endereco.pais} onChange={(event) => alterarEndereco('pais', event.target.value)} placeholder="Brasil" />
+              <input
+                className="input"
+                id="pais"
+                type="text"
+                placeholder="Brasil"
+                value={formulario.endereco.pais}
+                onChange={(event) =>
+                  alterarEndereco('pais', event.target.value)
+                }
+              />
             </div>
 
-            <div className="campo campo--completo">
+            <div className="field span2">
               <label htmlFor="complemento">Complemento</label>
-              <input id="complemento" type="text" value={formulario.endereco.complemento} onChange={(event) => alterarEndereco('complemento', event.target.value)} placeholder="Ex: Ap 105, Bloco 2, Sala 2..." />
+              <input
+                className="input"
+                id="complemento"
+                type="text"
+                placeholder="Ex: Ap 105, Bloco 2, Sala 2..."
+                value={formulario.endereco.complemento}
+                onChange={(event) =>
+                  alterarEndereco('complemento', event.target.value)
+                }
+              />
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="cadastro-fornecedor__acoes-inferiores">
-          <button type="button" className="cadastro-fornecedor__cancelar" onClick={() => navigate('/fornecedores')}>Cancelar</button>
+        <div className="page-head">
+          <button
+            className="btn btn-outline"
+            type="button"
+            onClick={() => navigate('/fornecedores')}
+          >
+            Cancelar
+          </button>
         </div>
       </form>
-    </section>
+    </>
   );
-}
-
-function formatarCnpj(valor: string) {
-  return valor
-    .replace(/\D/g, '')
-    .slice(0, 14)
-    .replace(/^(\d{2})(\d)/, '$1.$2')
-    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/\.(\d{3})(\d)/, '.$1/$2')
-    .replace(/(\d{4})(\d)/, '$1-$2');
-}
-
-function formatarCep(valor: string) {
-  return valor.replace(/\D/g, '').slice(0, 8).replace(/(\d{5})(\d)/, '$1-$2');
-}
-
-function formatarContato(valor: string) {
-  const numeros = valor.replace(/\D/g, '').slice(0, 11);
-
-  if (numeros.length <= 10) {
-    return numeros.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{4})(\d)/, '$1-$2');
-  }
-
-  return numeros.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2');
 }

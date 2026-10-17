@@ -3,7 +3,12 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import api from '../../services/api';
-import './CadastroEstoque.css';
+import { IconCheck, IconImage } from '../../components/common/Icons';
+import { assetUrl } from '../../utils/assets';
+import {
+  formatCurrencyInput,
+  parseCurrencyInput,
+} from '../../utils/formatters';
 
 interface Fornecedor {
   id: string;
@@ -43,6 +48,13 @@ interface ApiResponse<T> {
   data: T;
 }
 
+interface OpcoesProduto {
+  categorias: string[];
+  materiais: string[];
+  tamanhos: string[];
+  modelos: string[];
+}
+
 const formularioInicial: Formulario = {
   nome: '',
   categoria: '',
@@ -65,6 +77,12 @@ export function CadastroEstoque() {
 
   const [formulario, setFormulario] = useState<Formulario>(formularioInicial);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [opcoes, setOpcoes] = useState<OpcoesProduto>({
+    categorias: [],
+    materiais: [],
+    tamanhos: [],
+    modelos: [],
+  });
   const [imagem, setImagem] = useState<File | null>(null);
   const [previewImagem, setPreviewImagem] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -74,10 +92,15 @@ export function CadastroEstoque() {
   useEffect(() => {
     const carregarFornecedores = async () => {
       try {
-        const response = await api.get<ApiResponse<Fornecedor[]>>('/fornecedores');
+        const response = await api.get<ApiResponse<Fornecedor[]>>(
+          '/fornecedores',
+          { params: { limit: 100, status: 'ativo' } },
+        );
 
         setFornecedores(
-          (response.data.data ?? []).filter((fornecedor) => fornecedor.status === 'ativo'),
+          (response.data.data ?? []).filter(
+            (fornecedor) => fornecedor.status === 'ativo',
+          ),
         );
       } catch (error) {
         console.error(error);
@@ -86,6 +109,20 @@ export function CadastroEstoque() {
 
     carregarFornecedores();
   }, []);
+
+  useEffect(() => {
+    const carregarOpcoes = async () => {
+      try {
+        const response = await api.get<ApiResponse<OpcoesProduto>>(
+          '/produtos/opcoes',
+        );
+        setOpcoes(response.data.data);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    carregarOpcoes();
+  }, [modoEdicao]);
 
   useEffect(() => {
     if (!id) return;
@@ -102,7 +139,11 @@ export function CadastroEstoque() {
           categoria: produto.categoria ?? '',
           material: produto.material ?? '',
           tamanho: produto.tamanho ?? '',
-          valor: String(produto.valor ?? ''),
+          valor: produto.valor
+            ? formatCurrencyInput(
+                String(produto.valor).replace('.', '').replace(',', ''),
+              )
+            : '',
           genero: produto.genero ?? 'feminino',
           modelo: produto.modelo ?? '',
           quantidade: String(produto.quantidade ?? ''),
@@ -111,11 +152,7 @@ export function CadastroEstoque() {
         });
 
         if (produto.imagem) {
-          const caminho = produto.imagem.startsWith('/') ? produto.imagem : `/${produto.imagem}`;
-
-          setPreviewImagem(
-            produto.imagem.startsWith('http') ? produto.imagem : `http://localhost:3000${caminho}`,
-          );
+          setPreviewImagem(assetUrl(produto.imagem));
         }
       } catch (error) {
         console.error(error);
@@ -164,24 +201,19 @@ export function CadastroEstoque() {
   };
 
   const validar = () => {
-    if (
-      !formulario.nome ||
-      !formulario.categoria ||
-      !formulario.material ||
-      !formulario.tamanho ||
-      !formulario.valor ||
-      !formulario.modelo ||
-      !formulario.quantidade ||
-      !formulario.fornecedor_id
-    ) {
-      return 'Preencha todos os campos obrigatórios.';
+    if (!formulario.nome.trim()) {
+      return 'Informe o nome do produto.';
     }
 
-    if (Number(formulario.valor) < 0) {
-      return 'Informe um valor válido.';
+    if (!formulario.categoria.trim()) {
+      return 'Informe a categoria.';
     }
 
-    if (Number(formulario.quantidade) < 0) {
+    if (!formulario.valor || Number(parseCurrencyInput(formulario.valor)) <= 0) {
+      return 'Informe um valor maior que zero.';
+    }
+
+    if (formulario.quantidade === '' || Number(formulario.quantidade) < 0) {
       return 'Informe uma quantidade válida.';
     }
 
@@ -203,20 +235,26 @@ export function CadastroEstoque() {
       setErro('');
 
       const dados = new FormData();
+      const appendIfPresent = (key: string, value: string) => {
+        if (value && value.trim() !== '') {
+          dados.append(key, value.trim());
+        }
+      };
 
       dados.append('nome', formulario.nome.trim());
-      dados.append('categoria', formulario.categoria);
-      dados.append('material', formulario.material);
-      dados.append('tamanho', formulario.tamanho);
-      dados.append('valor', formulario.valor.replace(',', '.'));
-      dados.append('genero', formulario.genero);
-      dados.append('modelo', formulario.modelo);
-      dados.append('quantidade', formulario.quantidade);
-      dados.append('fornecedor_id', formulario.fornecedor_id);
+      dados.append('categoria', formulario.categoria.trim());
+      appendIfPresent('material', formulario.material);
+      appendIfPresent('tamanho', formulario.tamanho);
+      appendIfPresent('modelo', formulario.modelo);
+      appendIfPresent('descricao', formulario.descricao);
+      appendIfPresent('fornecedor_id', formulario.fornecedor_id);
 
-      if (formulario.descricao.trim()) {
-        dados.append('descricao', formulario.descricao.trim());
-      }
+      dados.append(
+        'valor',
+        parseCurrencyInput(formulario.valor),
+      );
+      dados.append('genero', formulario.genero);
+      dados.append('quantidade', formulario.quantidade);
 
       if (imagem) {
         dados.append('imagem', imagem);
@@ -229,10 +267,11 @@ export function CadastroEstoque() {
       }
 
       navigate('/estoque');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
 
-      const mensagem = error.response?.data?.message;
+      const mensagem = (error as { response?: { data?: { message?: string } } })
+        .response?.data?.message;
 
       setErro(
         Array.isArray(mensagem)
@@ -245,162 +284,253 @@ export function CadastroEstoque() {
   };
 
   if (carregando) {
-    return <div className="cadastro-estoque__carregando">Carregando produto...</div>;
+    return <p className="empty">Carregando produto...</p>;
   }
 
   return (
-    <section className="cadastro-estoque">
-      <form onSubmit={salvar}>
-        <div className="cadastro-estoque__topo">
+    <>
+      <div className="page-head">
+        <div>
           <h1>{modoEdicao ? 'Editar Produto' : 'Cadastro de Estoque'}</h1>
-
-          <button type="submit" className="cadastro-estoque__salvar" disabled={salvando}>
-            <span>☑</span>
-            {salvando ? 'Salvando...' : 'Salvar'}
-          </button>
         </div>
 
-        {erro && <div className="cadastro-estoque__erro">{erro}</div>}
+        <button
+          className="btn"
+          type="submit"
+          form="form-produto"
+          disabled={salvando}
+        >
+          <IconCheck />
+          {salvando ? 'Salvando...' : 'Salvar'}
+        </button>
+      </div>
 
-        <div className="cadastro-estoque__card">
-          <h2>Dados do Produto</h2>
+      <form id="form-produto" onSubmit={salvar}>
+        {erro && <div className="alert alert--error">{erro}</div>}
 
-          <div className="cadastro-estoque__grid">
-            <div className="estoque-campo">
-              <label>Nome</label>
-              <input value={formulario.nome} onChange={(event) => alterarCampo('nome', event.target.value)} placeholder="Digite o nome do produto" />
+        <section className="card form-card">
+          <h2 className="lg">Dados do Produto</h2>
+
+          <div className="grid c3">
+            <div className="field">
+              <label htmlFor="nome">Nome</label>
+              <input
+                className="input"
+                id="nome"
+                type="text"
+                placeholder="Digite o nome do produto"
+                value={formulario.nome}
+                onChange={(event) => alterarCampo('nome', event.target.value)}
+              />
             </div>
 
-            <div className="estoque-campo">
-              <label>Categoria</label>
-
-              <select value={formulario.categoria} onChange={(event) => alterarCampo('categoria', event.target.value)}>
-                <option value="">Selecione a categoria</option>
-                <option value="camisa">Camisa</option>
-                <option value="blusa">Blusa</option>
-                <option value="calça">Calça</option>
-                <option value="vestido">Vestido</option>
-                <option value="acessório">Acessório</option>
-              </select>
+            <div className="field">
+              <label htmlFor="categoria">Categoria</label>
+              <input
+                className="input"
+                id="categoria"
+                list={opcoes.categorias.length > 0 ? 'dl-categoria' : undefined}
+                type="text"
+                placeholder="Ex: camisa, calça, vestido..."
+                value={formulario.categoria}
+                onChange={(event) =>
+                  alterarCampo('categoria', event.target.value)
+                }
+              />
+              {opcoes.categorias.length > 0 && (
+                <datalist id="dl-categoria">
+                  {opcoes.categorias.map((opcao) => (
+                    <option key={opcao} value={opcao} />
+                  ))}
+                </datalist>
+              )}
             </div>
 
-            <div className="estoque-campo">
-              <label>Material</label>
-
-              <select value={formulario.material} onChange={(event) => alterarCampo('material', event.target.value)}>
-                <option value="">Selecione o material</option>
-                <option value="algodão">Algodão</option>
-                <option value="jeans">Jeans</option>
-                <option value="poliéster">Poliéster</option>
-                <option value="linho">Linho</option>
-                <option value="couro">Couro</option>
-              </select>
+            <div className="field">
+              <label htmlFor="material">Material</label>
+              <input
+                className="input"
+                id="material"
+                list={opcoes.materiais.length > 0 ? 'dl-material' : undefined}
+                type="text"
+                placeholder="Ex: algodão, jeans, poliéster..."
+                value={formulario.material}
+                onChange={(event) =>
+                  alterarCampo('material', event.target.value)
+                }
+              />
+              {opcoes.materiais.length > 0 && (
+                <datalist id="dl-material">
+                  {opcoes.materiais.map((opcao) => (
+                    <option key={opcao} value={opcao} />
+                  ))}
+                </datalist>
+              )}
             </div>
 
-            <div className="estoque-campo">
-              <label>Tamanho</label>
-
-              <select value={formulario.tamanho} onChange={(event) => alterarCampo('tamanho', event.target.value)}>
-                <option value="">Selecione o tamanho</option>
-                <option value="PP">PP</option>
-                <option value="P">P</option>
-                <option value="M">M</option>
-                <option value="G">G</option>
-                <option value="GG">GG</option>
-                <option value="36">36</option>
-                <option value="38">38</option>
-                <option value="40">40</option>
-                <option value="42">42</option>
-              </select>
+            <div className="field">
+              <label htmlFor="tamanho">Tamanho</label>
+              <input
+                className="input"
+                id="tamanho"
+                list={opcoes.tamanhos.length > 0 ? 'dl-tamanho' : undefined}
+                type="text"
+                placeholder="Ex: PP, P, M, G, 38, 44, Único..."
+                value={formulario.tamanho}
+                onChange={(event) =>
+                  alterarCampo('tamanho', event.target.value)
+                }
+              />
+              {opcoes.tamanhos.length > 0 && (
+                <datalist id="dl-tamanho">
+                  {opcoes.tamanhos.map((opcao) => (
+                    <option key={opcao} value={opcao} />
+                  ))}
+                </datalist>
+              )}
             </div>
 
-            <div className="estoque-campo">
-              <label>Valor</label>
-              <input type="number" min="0" step="0.01" value={formulario.valor} onChange={(event) => alterarCampo('valor', event.target.value)} placeholder="R$ 00,00" />
+            <div className="field">
+              <label htmlFor="valor">Valor</label>
+              <input
+                className="input"
+                id="valor"
+                type="text"
+                inputMode="decimal"
+                placeholder="0,00"
+                value={formulario.valor}
+                onChange={(event) =>
+                  alterarCampo('valor', formatCurrencyInput(event.target.value))
+                }
+              />
             </div>
 
-            <div className="estoque-campo">
-              <label>Gênero</label>
-
-              <div className="cadastro-estoque__generos">
+            <div className="field">
+              <span className="label-s">Gênero</span>
+              <div className="chips">
                 {[
                   { valor: 'feminino', texto: 'F' },
                   { valor: 'masculino', texto: 'M' },
                   { valor: 'unissex', texto: 'U' },
                 ].map((genero) => (
-                  <button
+                  <label
                     key={genero.valor}
-                    type="button"
-                    className={formulario.genero === genero.valor ? 'ativo' : ''}
-                    onClick={() => alterarCampo('genero', genero.valor)}
+                    className={`chip${
+                      formulario.genero === genero.valor ? ' sel' : ''
+                    }`}
                   >
+                    <input
+                      type="radio"
+                      name="genero"
+                      value={genero.valor}
+                      checked={formulario.genero === genero.valor}
+                      onChange={() => alterarCampo('genero', genero.valor)}
+                    />
                     {genero.texto}
-                  </button>
+                  </label>
                 ))}
               </div>
             </div>
 
-            <div className="estoque-campo">
-              <label>Modelo</label>
-
-              <select value={formulario.modelo} onChange={(event) => alterarCampo('modelo', event.target.value)}>
-                <option value="">Selecione o modelo</option>
-                <option value="curto">Curto</option>
-                <option value="longo">Longo</option>
-                <option value="flare">Flare</option>
-                <option value="wide leg">Wide Leg</option>
-                <option value="reto">Reto</option>
-              </select>
+            <div className="field">
+              <label htmlFor="modelo">Modelo</label>
+              <input
+                className="input"
+                id="modelo"
+                list={opcoes.modelos.length > 0 ? 'dl-modelo' : undefined}
+                type="text"
+                placeholder="Ex: curto, longo, flare, reto..."
+                value={formulario.modelo}
+                onChange={(event) => alterarCampo('modelo', event.target.value)}
+              />
+              {opcoes.modelos.length > 0 && (
+                <datalist id="dl-modelo">
+                  {opcoes.modelos.map((opcao) => (
+                    <option key={opcao} value={opcao} />
+                  ))}
+                </datalist>
+              )}
             </div>
 
-            <div className="estoque-campo">
-              <label>Quantidade em estoque</label>
-              <input type="number" min="0" step="1" value={formulario.quantidade} onChange={(event) => alterarCampo('quantidade', event.target.value)} placeholder="Digite a quantidade" />
+            <div className="field">
+              <label htmlFor="quantidade">Quantidade em estoque</label>
+              <input
+                className="input"
+                id="quantidade"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="Digite a quantidade"
+                value={formulario.quantidade}
+                onChange={(event) =>
+                  alterarCampo('quantidade', event.target.value)
+                }
+              />
             </div>
 
-            <div className="estoque-campo">
-              <label>Fornecedor</label>
+            <div className="field">
+              <label htmlFor="fornecedor">Fornecedor (opcional)</label>
+              <select
+                className="select"
+                id="fornecedor"
+                value={formulario.fornecedor_id}
+                  onChange={(event) =>
+                    alterarCampo('fornecedor_id', event.target.value)
+                  }
+                >
+                  <option value="">Sem fornecedor</option>
 
-              <select value={formulario.fornecedor_id} onChange={(event) => alterarCampo('fornecedor_id', event.target.value)}>
-                <option value="">Selecione o fornecedor</option>
+                  {fornecedores.map((fornecedor) => (
+                    <option key={fornecedor.id} value={fornecedor.id}>
+                      {fornecedor.nome}
+                    </option>
+                  ))}
+                </select>
+            </div>
+          </div>
 
-                {fornecedores.map((fornecedor) => (
-                  <option key={fornecedor.id} value={fornecedor.id}>
-                    {fornecedor.nome}
-                  </option>
-                ))}
-              </select>
+          <div className="grid c2" style={{ marginTop: 20 }}>
+            <div className="field">
+              <label htmlFor="descricao">Descrição</label>
+              <textarea
+                className="textarea"
+                id="descricao"
+                placeholder="Adicione uma descrição do produto ..."
+                value={formulario.descricao}
+                onChange={(event) =>
+                  alterarCampo('descricao', event.target.value)
+                }
+              />
             </div>
 
-            <div className="estoque-campo cadastro-estoque__descricao">
-              <label>Descrição</label>
-              <textarea value={formulario.descricao} onChange={(event) => alterarCampo('descricao', event.target.value)} placeholder="Adicione uma descrição do produto ..." />
-            </div>
-
-            <div className="cadastro-estoque__upload" onClick={() => inputImagem.current?.click()}>
-              <input ref={inputImagem} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={selecionarImagem} />
-
+            <label className="upload">
+              <IconImage />
               {previewImagem ? (
                 <img src={previewImagem} alt="Pré-visualização" />
               ) : (
-                <div>
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
-                    <circle cx="9" cy="10" r="2" stroke="currentColor" strokeWidth="1.5" />
-                    <path d="m5 18 5-5 3 3 2-2 4 4" stroke="currentColor" strokeWidth="1.5" />
-                  </svg>
-
-                  <span>Clique para enviar a imagem</span>
-                </div>
+                <span>Clique para enviar a imagem</span>
               )}
-            </div>
+              <input
+                ref={inputImagem}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                onChange={selecionarImagem}
+              />
+            </label>
           </div>
-        </div>
+        </section>
 
-        <div className="cadastro-estoque__rodape">
-          <button type="button" onClick={() => navigate('/estoque')}>Cancelar</button>
+        <div className="page-head">
+          <button
+            className="btn btn-outline"
+            type="button"
+            onClick={() => navigate('/estoque')}
+          >
+            Cancelar
+          </button>
         </div>
       </form>
-    </section>
+    </>
   );
 }

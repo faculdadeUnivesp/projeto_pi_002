@@ -2,7 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import api from '../../services/api';
-import './Estoque.css';
+import {
+  IconSearch,
+  IconPlus,
+  IconEdit,
+  IconTrash,
+} from '../../components/common/Icons';
+import { formatCurrency } from '../../utils/formatters';
+import { assetUrl } from '../../utils/assets';
 
 interface Fornecedor {
   id: string;
@@ -40,6 +47,11 @@ interface ProdutosResponse {
   meta: Meta;
 }
 
+interface OpcoesProduto {
+  categorias: string[];
+  tamanhos: string[];
+}
+
 export function Estoque() {
   const navigate = useNavigate();
 
@@ -57,6 +69,10 @@ export function Estoque() {
   const [busca, setBusca] = useState('');
   const [categoria, setCategoria] = useState('');
   const [tamanho, setTamanho] = useState('');
+  const [opcoes, setOpcoes] = useState<OpcoesProduto>({
+    categorias: [],
+    tamanhos: [],
+  });
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
@@ -95,27 +111,31 @@ export function Estoque() {
   }, [carregarProdutos]);
 
   useEffect(() => {
+    const carregarOpcoes = async () => {
+      try {
+        const response = await api.get<{ data: OpcoesProduto }>(
+          '/produtos/opcoes',
+        );
+        setOpcoes(response.data.data);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    carregarOpcoes();
+  }, []);
+
+  useEffect(() => {
     setPagina(1);
   }, [busca, categoria, tamanho]);
 
-  const formatarValor = (valor: number | string) => {
-    return Number(valor).toLocaleString('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    });
-  };
+  const formatarValor = formatCurrency;
 
-  const urlImagem = (produto: Produto) => {
-    if (!produto.imagem) return null;
-    if (produto.imagem.startsWith('http')) return produto.imagem;
-
-    const caminho = produto.imagem.startsWith('/') ? produto.imagem : `/${produto.imagem}`;
-
-    return `http://localhost:3000${caminho}`;
-  };
+  const urlImagem = (produto: Produto) => assetUrl(produto.imagem);
 
   const inativarProduto = async (produto: Produto) => {
-    const confirmar = window.confirm(`Deseja inativar o produto "${produto.nome}"?`);
+    const confirmar = window.confirm(
+      `Deseja inativar o produto "${produto.nome}"?`,
+    );
 
     if (!confirmar) return;
 
@@ -129,61 +149,86 @@ export function Estoque() {
   };
 
   return (
-    <section className="estoque">
-      <div className="estoque__topo">
-        <h1>Estoque</h1>
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Estoque</h1>
+        </div>
 
-        <button type="button" className="estoque__novo" onClick={() => navigate('/estoque/cadastrar')}>
-          <span>+</span>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => navigate('/estoque/cadastrar')}
+        >
+          <IconPlus />
           Novo Produto
         </button>
       </div>
 
-      <div className="estoque__filtros">
-        <div className="estoque__busca">
-          <svg viewBox="0 0 24 24" fill="none">
-            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
-            <path d="m16.5 16.5 4.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+      <div className="list-filters">
+        <label className="search">
+          <IconSearch />
+          <input
+            className="input"
+            type="search"
+            placeholder="Buscar produto"
+            aria-label="Buscar produto"
+            value={busca}
+            onChange={(event) => setBusca(event.target.value)}
+          />
+        </label>
 
-          <input type="text" value={busca} placeholder="Buscar produto" onChange={(event) => setBusca(event.target.value)} />
-        </div>
+        <input
+          className="input"
+          list={opcoes.categorias.length > 0 ? 'dl-estoque-categoria' : undefined}
+          type="text"
+          placeholder="Categoria"
+          aria-label="Filtrar por categoria"
+          value={categoria}
+          onChange={(event) => setCategoria(event.target.value)}
+        />
+        {opcoes.categorias.length > 0 && (
+          <datalist id="dl-estoque-categoria">
+            {opcoes.categorias.map((opcao) => (
+              <option key={opcao} value={opcao} />
+            ))}
+          </datalist>
+        )}
 
-        <select value={categoria} onChange={(event) => setCategoria(event.target.value)}>
-          <option value="">Todas as categorias</option>
-          <option value="camisa">Camisa</option>
-          <option value="calça">Calça</option>
-          <option value="blusa">Blusa</option>
-          <option value="vestido">Vestido</option>
-          <option value="acessório">Acessório</option>
-        </select>
-
-        <select value={tamanho} onChange={(event) => setTamanho(event.target.value)}>
-          <option value="">Todos os tamanhos</option>
-          <option value="PP">PP</option>
-          <option value="P">P</option>
-          <option value="M">M</option>
-          <option value="G">G</option>
-          <option value="GG">GG</option>
-          <option value="36">36</option>
-          <option value="38">38</option>
-          <option value="40">40</option>
-          <option value="42">42</option>
-        </select>
+        <input
+          className="input"
+          list={opcoes.tamanhos.length > 0 ? 'dl-estoque-tamanho' : undefined}
+          type="text"
+          placeholder="Tamanho"
+          aria-label="Filtrar por tamanho"
+          value={tamanho}
+          onChange={(event) => setTamanho(event.target.value)}
+        />
+        {opcoes.tamanhos.length > 0 && (
+          <datalist id="dl-estoque-tamanho">
+            {opcoes.tamanhos.map((opcao) => (
+              <option key={opcao} value={opcao} />
+            ))}
+          </datalist>
+        )}
       </div>
 
-      <div className="estoque__card">
+      {erro && (
+        <div className="alert alert--error">
+          {erro}{' '}
+          <button className="btn btn-outline" type="button" onClick={carregarProdutos}>
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      <div className="card table-card">
         {carregando ? (
-          <div className="estoque__estado">Carregando produtos...</div>
-        ) : erro ? (
-          <div className="estoque__estado estoque__estado--erro">
-            <p>{erro}</p>
-            <button type="button" onClick={carregarProdutos}>Tentar novamente</button>
-          </div>
+          <p className="empty">Carregando produtos...</p>
         ) : (
           <>
-            <div className="estoque__tabela-wrapper">
-              <table className="estoque__tabela">
+            <div className="table-scroll">
+              <table className="data">
                 <thead>
                   <tr>
                     <th>Nome</th>
@@ -203,13 +248,18 @@ export function Estoque() {
                       return (
                         <tr key={produto.id}>
                           <td>
-                            <div className="estoque__produto">
-                              <div className="estoque__imagem">
-                                {imagem ? <img src={imagem} alt={produto.nome} /> : <span />}
-                              </div>
-
-                              <strong>{produto.nome}</strong>
-                            </div>
+                            <span className="prod">
+                              {imagem ? (
+                                <img
+                                  className="thumb"
+                                  src={imagem}
+                                  alt={produto.nome}
+                                />
+                              ) : (
+                                <span className="thumb" />
+                              )}
+                              {produto.nome}
+                            </span>
                           </td>
 
                           <td>{produto.categoria}</td>
@@ -218,57 +268,70 @@ export function Estoque() {
                           <td>{produto.quantidade}</td>
 
                           <td>
-                            <div className="estoque__acoes">
+                            <span className="actions">
                               <button
                                 type="button"
-                                className="estoque__acao estoque__acao--editar"
-                                title="Editar produto"
-                                onClick={() => navigate(`/estoque/${produto.id}/editar`)}
+                                className="btn btn-icon"
+                                aria-label="Editar"
+                                onClick={() =>
+                                  navigate(`/estoque/${produto.id}/editar`)
+                                }
                               >
-                                <svg viewBox="0 0 24 24" fill="none">
-                                  <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke="currentColor" strokeWidth="1.6" />
-                                </svg>
+                                <IconEdit />
                               </button>
 
                               <button
                                 type="button"
-                                className="estoque__acao estoque__acao--excluir"
-                                title="Inativar produto"
+                                className="btn btn-icon danger"
+                                aria-label="Inativar"
                                 onClick={() => inativarProduto(produto)}
                               >
-                                <svg viewBox="0 0 24 24" fill="none">
-                                  <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                                </svg>
+                                <IconTrash />
                               </button>
-                            </div>
+                            </span>
                           </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={6} className="estoque__vazio">Nenhum produto encontrado.</td>
+                      <td colSpan={6} className="empty">
+                        Nenhum produto encontrado.
+                      </td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
 
-            <div className="estoque__rodape">
+            <div className="table-foot">
               <span>
                 Mostrando {meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1}-
-                {Math.min(meta.page * meta.limit, meta.total)} de {meta.total} produtos
+                {Math.min(meta.page * meta.limit, meta.total)} de {meta.total}{' '}
+                produtos
               </span>
 
-              <div className="estoque__paginacao">
-                <button type="button" disabled={!meta.hasPreviousPage} onClick={() => setPagina(pagina - 1)}>‹</button>
-                <span>{meta.page}</span>
-                <button type="button" disabled={!meta.hasNextPage} onClick={() => setPagina(pagina + 1)}>›</button>
+              <div className="pager">
+                <button
+                  type="button"
+                  disabled={!meta.hasPreviousPage}
+                  onClick={() => setPagina(pagina - 1)}
+                >
+                  ‹
+                </button>
+                <span className="cur">{meta.page}</span>
+                <button
+                  type="button"
+                  disabled={!meta.hasNextPage}
+                  onClick={() => setPagina(pagina + 1)}
+                >
+                  ›
+                </button>
               </div>
             </div>
           </>
         )}
       </div>
-    </section>
+    </>
   );
 }

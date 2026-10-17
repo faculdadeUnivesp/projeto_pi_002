@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import { Link } from 'react-router-dom';
 import api from '../../services/api';
-import './Dashboard.css';
+import {
+  IconVendas,
+  IconEstoque,
+  IconWarning,
+} from '../../components/common/Icons';
 
 interface DashboardDados {
   vendas_hoje: {
@@ -12,15 +16,17 @@ interface DashboardDados {
   estoque_baixo: number;
 }
 
+interface ProdutoEstoqueBaixo {
+  id: string;
+  nome: string;
+  tamanho: string;
+  quantidade: number;
+}
+
 export function Dashboard() {
-  const { user } = useAuth();
-
-  const [dados, setDados] =
-    useState<DashboardDados | null>(null);
-
-  const [carregando, setCarregando] =
-    useState(true);
-
+  const [dados, setDados] = useState<DashboardDados | null>(null);
+  const [estoqueBaixo, setEstoqueBaixo] = useState<ProdutoEstoqueBaixo[]>([]);
+  const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
   useEffect(() => {
@@ -29,13 +35,17 @@ export function Dashboard() {
         setCarregando(true);
         setErro('');
 
-        const response = await api.get('/dashboard');
+        const [dashboardResponse, estoqueResponse] = await Promise.all([
+          api.get('/dashboard'),
+          api.get('/relatorios/estoque-baixo', {
+            params: { limite: 5, page: 1 },
+          }),
+        ]);
 
-        setDados(response.data.data);
+        setDados(dashboardResponse.data.data);
+        setEstoqueBaixo(estoqueResponse.data.data ?? []);
       } catch {
-        setErro(
-          'Não foi possível carregar os dados do dashboard.',
-        );
+        setErro('Não foi possível carregar os dados do dashboard.');
       } finally {
         setCarregando(false);
       }
@@ -52,76 +62,77 @@ export function Dashboard() {
   }
 
   return (
-    <div className="dashboard">
-      <div className="dashboard__cabecalho">
-        <h1>Dashboard</h1>
-
-        <p>
-          Bem-vindo, {user?.nome}!
-        </p>
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Dashboard</h1>
+          <p>Visão geral do seu negócio</p>
+        </div>
       </div>
 
-      {erro && (
-        <div className="dashboard__erro">
-          {erro}
-        </div>
-      )}
+      {erro && <div className="alert alert--error">{erro}</div>}
 
       {carregando ? (
-        <p>Carregando dashboard...</p>
+        <p className="empty">Carregando dashboard...</p>
       ) : dados ? (
-        <div className="dashboard__cards">
-          <div className="dashboard__card">
-            <h3>Vendas de hoje</h3>
-
-            <strong>
-              {dados.vendas_hoje.quantidade}
-            </strong>
-
-            <span>
-              vendas concluídas
+        <section className="kpis">
+          <article className="card kpi">
+            <span className="badge">
+              <IconVendas />
             </span>
-          </div>
+            <div className="label">Faturamento de Hoje</div>
+            <div className="value">{formatarValor(dados.vendas_hoje.total)}</div>
+            <div className="hint">
+              {dados.vendas_hoje.quantidade} venda
+              {dados.vendas_hoje.quantidade === 1 ? '' : 's'} concluída
+              {dados.vendas_hoje.quantidade === 1 ? '' : 's'} hoje
+            </div>
+          </article>
 
-          <div className="dashboard__card">
-            <h3>Faturamento de hoje</h3>
-
-            <strong>
-              {formatarValor(
-                dados.vendas_hoje.total,
-              )}
-            </strong>
-
-            <span>
-              vendas concluídas
+          <article className="card kpi">
+            <span className="badge">
+              <IconEstoque />
             </span>
-          </div>
+            <div className="label">Total de Produtos</div>
+            <div className="value">{dados.total_produtos}</div>
+            <div className="hint">Produtos cadastrados no catálogo</div>
+          </article>
 
-          <div className="dashboard__card">
-            <h3>Total de produtos</h3>
+          <article className="card">
+            <div className="low-title">
+              <IconWarning />
+              Produtos com estoque baixo
+            </div>
 
-            <strong>
-              {dados.total_produtos}
-            </strong>
+            {estoqueBaixo.length > 0 ? (
+              <table className="mini-table">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Qtd.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {estoqueBaixo.slice(0, 5).map((produto) => (
+                    <tr key={produto.id}>
+                      <td>
+                        {produto.nome} ({produto.tamanho})
+                      </td>
+                      <td>{produto.quantidade}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="empty">Nenhum produto com estoque baixo.</p>
+            )}
 
-            <span>
-              produtos cadastrados
-            </span>
-          </div>
-
-          <div className="dashboard__card">
-            <h3>Estoque baixo</h3>
-
-            <strong>
-              {dados.estoque_baixo}
-            </strong>
-
-            <span>
-              produtos com até 5 unidades
-            </span>
-          </div>
-        </div>
+            <Link className="see-all" to="/estoque">
+              Ver todos →
+            </Link>
+          </article>
+        </section>
       ) : null}
-    </div>
+    </>
   );
 }

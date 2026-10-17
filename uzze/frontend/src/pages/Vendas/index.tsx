@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import api from '../../services/api';
-import './Vendas.css';
+import {
+  IconPlus,
+  IconSearch,
+  IconTrash,
+  IconCheck,
+} from '../../components/common/Icons';
 
 interface Venda {
   id: string;
@@ -65,8 +70,9 @@ export function Vendas() {
   });
 
   const [novaVenda, setNovaVenda] = useState(false);
-  const [produtoId, setProdutoId] = useState('');
-  const [quantidade, setQuantidade] = useState(1);
+  const [buscaProduto, setBuscaProduto] = useState('');
+
+  const [quantidades, setQuantidades] = useState<Record<string, number>>({});
 
   const [formaPagamento, setFormaPagamento] =
     useState<FormaPagamento>('dinheiro');
@@ -78,13 +84,9 @@ export function Vendas() {
 
   const [dataFiltro, setDataFiltro] = useState('');
 
-  const [vendaDetalhe, setVendaDetalhe] =
-    useState<VendaDetalhe | null>(null);
+  const [vendaDetalhe, setVendaDetalhe] = useState<VendaDetalhe | null>(null);
 
-  async function carregarVendas(
-    page = 1,
-    data = dataFiltro,
-  ) {
+  async function carregarVendas(page = 1, data = dataFiltro) {
     try {
       setCarregando(true);
       setErro('');
@@ -108,15 +110,15 @@ export function Vendas() {
 
   async function carregarProdutos() {
     try {
-      const response = await api.get('/produtos');
+      const response = await api.get('/produtos', {
+        params: { limit: 100, status: 'ativo' },
+      });
 
-      const produtosDisponiveis = response.data.filter(
-        (produto: Produto) =>
-          produto.status === 'ativo' &&
-          produto.quantidade > 0,
+      const lista: Produto[] = response.data.data ?? [];
+
+      setProdutos(
+        lista.filter((produto) => produto.quantidade > 0),
       );
-
-      setProdutos(produtosDisponiveis);
     } catch {
       setErro('Não foi possível carregar os produtos.');
     }
@@ -130,43 +132,36 @@ export function Vendas() {
     setErro('');
     setMensagem('');
     setItens([]);
-    setProdutoId('');
-    setQuantidade(1);
+    setBuscaProduto('');
+    setQuantidades({});
 
     await carregarProdutos();
 
     setNovaVenda(true);
   }
 
-  function adicionarItem() {
+  function adicionarItem(idProduto: string, qtd: number) {
     setErro('');
 
-    if (!produtoId) {
-      setErro('Selecione um produto.');
-      return;
-    }
-
-    if (quantidade < 1) {
-      setErro('A quantidade deve ser maior que zero.');
-      return;
-    }
-
-    const produto = produtos.find(
-      (produto) => produto.id === produtoId,
-    );
+    const produto = produtos.find((p) => p.id === idProduto);
 
     if (!produto) {
       setErro('Produto não encontrado.');
       return;
     }
 
-    if (quantidade > produto.quantidade) {
+    if (qtd < 1) {
+      setErro('A quantidade deve ser maior que zero.');
+      return;
+    }
+
+    if (qtd > produto.quantidade) {
       setErro('Quantidade maior que o estoque disponível.');
       return;
     }
 
     const produtoJaAdicionado = itens.some(
-      (item) => item.produtoId === produtoId,
+      (item) => item.produtoId === idProduto,
     );
 
     if (produtoJaAdicionado) {
@@ -174,48 +169,38 @@ export function Vendas() {
       return;
     }
 
-    setItens([
-      ...itens,
-      {
-        produtoId,
-        quantidade,
-      },
-    ]);
-
-    setProdutoId('');
-    setQuantidade(1);
+    setItens([...itens, { produtoId: idProduto, quantidade: qtd }]);
   }
 
-  function removerItem(produtoId: string) {
+  function alterarQuantidadeItem(produtoId: string, novaQuantidade: number) {
     setItens(
-      itens.filter(
-        (item) => item.produtoId !== produtoId,
+      itens.map((item) =>
+        item.produtoId === produtoId
+          ? { ...item, quantidade: novaQuantidade }
+          : item,
       ),
     );
   }
 
+  function removerItem(produtoId: string) {
+    setItens(itens.filter((item) => item.produtoId !== produtoId));
+  }
+
   function calcularTotal() {
     return itens.reduce((total, item) => {
-      const produto = produtos.find(
-        (produto) => produto.id === item.produtoId,
-      );
+      const produto = produtos.find((p) => p.id === item.produtoId);
 
       if (!produto) {
         return total;
       }
 
-      return (
-        total +
-        Number(produto.valor) * item.quantidade
-      );
+      return total + Number(produto.valor) * item.quantidade;
     }, 0);
   }
 
   async function finalizarVenda() {
     if (itens.length === 0) {
-      setErro(
-        'A venda deve possuir pelo menos um item',
-      );
+      setErro('A venda deve possuir pelo menos um item');
       return;
     }
 
@@ -229,25 +214,20 @@ export function Vendas() {
         itens,
       });
 
-      setMensagem(
-        'Venda registrada com sucesso.',
-      );
+      setMensagem('Venda registrada com sucesso.');
 
       setNovaVenda(false);
       setItens([]);
 
       await carregarVendas(1, dataFiltro);
-    } catch (error: any) {
-      const mensagemErro =
-        error.response?.data?.message;
+    } catch (error: unknown) {
+      const mensagemErro = (error as { response?: { data?: { message?: string } } })
+        .response?.data?.message;
 
       if (Array.isArray(mensagemErro)) {
         setErro(mensagemErro.join(', '));
       } else {
-        setErro(
-          mensagemErro ||
-            'Não foi possível registrar a venda.',
-        );
+        setErro(mensagemErro || 'Não foi possível registrar a venda.');
       }
     } finally {
       setSalvando(false);
@@ -267,22 +247,16 @@ export function Vendas() {
     try {
       setErro('');
 
-      const response = await api.get(
-        `/vendas/${id}`,
-      );
+      const response = await api.get(`/vendas/${id}`);
 
       setVendaDetalhe(response.data.data);
     } catch {
-      setErro(
-        'Não foi possível carregar os detalhes da venda.',
-      );
+      setErro('Não foi possível carregar os detalhes da venda.');
     }
   }
 
   async function cancelarVenda(id: string) {
-    const confirmar = window.confirm(
-      'Deseja realmente cancelar esta venda?',
-    );
+    const confirmar = window.confirm('Deseja realmente cancelar esta venda?');
 
     if (!confirmar) {
       return;
@@ -292,75 +266,49 @@ export function Vendas() {
       setErro('');
       setMensagem('');
 
-      await api.patch(
-        `/vendas/${id}/cancelar`,
-      );
+      await api.patch(`/vendas/${id}/cancelar`);
 
-      setMensagem(
-        'Venda cancelada com sucesso.',
-      );
+      setMensagem('Venda cancelada com sucesso.');
 
       setVendaDetalhe(null);
 
-      await carregarVendas(
-        meta.page,
-        dataFiltro,
-      );
-    } catch (error: any) {
-      const mensagemErro =
-        error.response?.data?.message;
+      await carregarVendas(meta.page, dataFiltro);
+    } catch (error: unknown) {
+      const mensagemErro = (error as { response?: { data?: { message?: string } } })
+        .response?.data?.message;
 
       if (Array.isArray(mensagemErro)) {
         setErro(mensagemErro.join(', '));
       } else {
-        setErro(
-          mensagemErro ||
-            'Não foi possível cancelar a venda.',
-        );
+        setErro(mensagemErro || 'Não foi possível cancelar a venda.');
       }
     }
   }
 
   function paginaAnterior() {
     if (meta.page > 1) {
-      carregarVendas(
-        meta.page - 1,
-        dataFiltro,
-      );
+      carregarVendas(meta.page - 1, dataFiltro);
     }
   }
 
   function proximaPagina() {
-    if (
-      meta.page * meta.limit <
-      meta.total
-    ) {
-      carregarVendas(
-        meta.page + 1,
-        dataFiltro,
-      );
+    if (meta.page * meta.limit < meta.total) {
+      carregarVendas(meta.page + 1, dataFiltro);
     }
   }
 
   function formatarValor(valor: number) {
-    return Number(valor).toLocaleString(
-      'pt-BR',
-      {
-        style: 'currency',
-        currency: 'BRL',
-      },
-    );
+    return Number(valor).toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    });
   }
 
   function formatarData(data: string) {
-    return new Date(data).toLocaleString(
-      'pt-BR',
-    );
+    return new Date(data).toLocaleString('pt-BR');
   }
 
-  function formatarPagamento(
-    forma: Venda['forma_pagamento'],
-  ) {
+  function formatarPagamento(forma: Venda['forma_pagamento']) {
     const formas = {
       dinheiro: 'Dinheiro',
       cartao: 'Cartão',
@@ -370,286 +318,273 @@ export function Vendas() {
     return formas[forma];
   }
 
+  const produtosFiltrados = produtos.filter((produto) => {
+    const termo = buscaProduto.trim().toLowerCase();
+
+    if (!termo) return true;
+
+    return (
+      produto.nome.toLowerCase().includes(termo) ||
+      produto.tamanho.toLowerCase().includes(termo)
+    );
+  });
+
+  function contarItens() {
+    return itens.reduce((total, item) => total + item.quantidade, 0);
+  }
+
   return (
-    <div className="vendas">
-      <div className="vendas__cabecalho">
+    <>
+      <div className="page-head">
         <div>
-          <h2>Vendas</h2>
-          <p>
-            Consulte e registre as vendas da loja.
-          </p>
+          <h1>Vendas realizadas</h1>
         </div>
 
         {!novaVenda && (
-          <button
-            type="button"
-            className="vendas__nova"
-            onClick={abrirNovaVenda}
-          >
-            Nova venda
+          <button className="btn" type="button" onClick={abrirNovaVenda}>
+            <IconPlus />
+            Nova Venda
           </button>
         )}
       </div>
 
-      {erro && (
-        <div className="vendas__erro">
-          {erro}
-        </div>
-      )}
-
-      {mensagem && (
-        <div className="vendas__sucesso">
-          {mensagem}
-        </div>
-      )}
+      {erro && <div className="alert alert--error">{erro}</div>}
+      {mensagem && <div className="alert alert--success">{mensagem}</div>}
 
       {novaVenda ? (
-        <div className="vendas__formulario">
-          <h3>Nova venda</h3>
+        <form
+          className="sale"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void finalizarVenda();
+          }}
+        >
+          <section className="card">
+            <h2 className="lg">Adicionar Produtos</h2>
 
-          <div className="vendas__campos">
-            <div className="vendas__campo">
-              <label htmlFor="produto">
-                Produto
-              </label>
-
-              <select
-                id="produto"
-                value={produtoId}
-                onChange={(event) =>
-                  setProdutoId(
-                    event.target.value,
-                  )
-                }
-              >
-                <option value="">
-                  Selecione um produto
-                </option>
-
-                {produtos.map((produto) => (
-                  <option
-                    key={produto.id}
-                    value={produto.id}
-                  >
-                    {produto.nome} -{' '}
-                    {produto.tamanho} -{' '}
-                    {formatarValor(
-                      produto.valor,
-                    )}{' '}
-                    - Estoque:{' '}
-                    {produto.quantidade}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="vendas__campo">
-              <label htmlFor="quantidade">
-                Quantidade
-              </label>
-
+            <label className="search-sm">
+              <IconSearch />
               <input
-                id="quantidade"
-                type="number"
-                min="1"
-                value={quantidade}
-                onChange={(event) =>
-                  setQuantidade(
-                    Number(
-                      event.target.value,
-                    ),
-                  )
-                }
+                type="search"
+                placeholder="Buscar produto por nome ou tamanho..."
+                aria-label="Buscar produto"
+                value={buscaProduto}
+                onChange={(event) => setBuscaProduto(event.target.value)}
               />
-            </div>
-
-            <button
-              type="button"
-              onClick={adicionarItem}
-            >
-              Adicionar
-            </button>
-          </div>
-
-          {produtos.length === 0 && (
-            <p>
-              Nenhum produto com estoque
-              disponível.
-            </p>
-          )}
-
-          {itens.length > 0 && (
-            <div className="vendas__tabela-container">
-              <table className="vendas__tabela">
-                <thead>
-                  <tr>
-                    <th>Produto</th>
-                    <th>Tamanho</th>
-                    <th>Quantidade</th>
-                    <th>
-                      Valor unitário
-                    </th>
-                    <th>Subtotal</th>
-                    <th>Ação</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {itens.map((item) => {
-                    const produto =
-                      produtos.find(
-                        (produto) =>
-                          produto.id ===
-                          item.produtoId,
-                      );
-
-                    if (!produto) {
-                      return null;
-                    }
-
-                    return (
-                      <tr
-                        key={item.produtoId}
-                      >
-                        <td>
-                          {produto.nome}
-                        </td>
-
-                        <td>
-                          {produto.tamanho}
-                        </td>
-
-                        <td>
-                          {item.quantidade}
-                        </td>
-
-                        <td>
-                          {formatarValor(
-                            produto.valor,
-                          )}
-                        </td>
-
-                        <td>
-                          {formatarValor(
-                            Number(
-                              produto.valor,
-                            ) *
-                              item.quantidade,
-                          )}
-                        </td>
-
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removerItem(
-                                item.produtoId,
-                              )
-                            }
-                          >
-                            Remover
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="vendas__pagamento">
-            <label htmlFor="formaPagamento">
-              Forma de pagamento
             </label>
 
-            <select
-              id="formaPagamento"
-              value={formaPagamento}
-              onChange={(event) =>
-                setFormaPagamento(
-                  event.target
-                    .value as FormaPagamento,
-                )
-              }
-            >
-              <option value="dinheiro">
-                Dinheiro
-              </option>
+            <div className="sale-table">
+              <div className="head">
+                <span>Produto</span>
+                <span>Preço</span>
+                <span>Estoque</span>
+                <span>Adicionar</span>
+              </div>
 
-              <option value="cartao">
-                Cartão
-              </option>
+              {produtosFiltrados.length > 0 ? (
+                produtosFiltrados.map((produto) => {
+                  const itemSelecionado = itens.find(
+                    (item) => item.produtoId === produto.id,
+                  );
+                  const jaAdicionado = Boolean(itemSelecionado);
 
-              <option value="pix">
-                PIX
-              </option>
-            </select>
-          </div>
-
-          <div className="vendas__resumo">
-            <strong>
-              Total:{' '}
-              {formatarValor(
-                calcularTotal(),
+                  return (
+                    <div className="row" key={produto.id}>
+                      <span className="prod">
+                        <span className="thumb" />
+                        {produto.nome} ({produto.tamanho})
+                      </span>
+                      <span>{formatarValor(produto.valor)}</span>
+                      <span>{produto.quantidade}</span>
+                      <span>
+                        {jaAdicionado ? (
+                          <span className="status">Adicionado</span>
+                        ) : (
+                          <div className="qty">
+                            <input
+                              type="number"
+                              min={1}
+                              max={produto.quantidade}
+                              value={quantidades[produto.id] ?? 1}
+                              aria-label={`Quantidade de ${produto.nome}`}
+                              onChange={(event) => {
+                                const valor = Number(event.target.value);
+                                setQuantidades((anterior) => ({
+                                  ...anterior,
+                                  [produto.id]:
+                                    Number.isFinite(valor) && valor >= 1
+                                      ? Math.min(valor, produto.quantidade)
+                                      : 1,
+                                }));
+                              }}
+                            />
+                            <button
+                              className="btn btn-icon"
+                              type="button"
+                              aria-label={`Adicionar ${produto.nome}`}
+                              onClick={() =>
+                                adicionarItem(
+                                  produto.id,
+                                  quantidades[produto.id] ?? 1,
+                                )
+                              }
+                            >
+                              <IconPlus />
+                            </button>
+                          </div>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="row">
+                  <span style={{ gridColumn: '1 / -1' }} className="empty">
+                    Nenhum produto encontrado.
+                  </span>
+                </div>
               )}
-            </strong>
-          </div>
+            </div>
+          </section>
 
-          <div className="vendas__acoes">
+          <aside className="card summary">
+            <h2>Resumo da Venda</h2>
+
+            <dl>
+              <dt>Subtotal ({contarItens()} itens)</dt>
+              <dd>{formatarValor(calcularTotal())}</dd>
+
+              <dt>Forma de pagamento</dt>
+              <dd>
+                <select
+                  className="select"
+                  value={formaPagamento}
+                  onChange={(event) =>
+                    setFormaPagamento(event.target.value as FormaPagamento)
+                  }
+                  style={{ width: 'auto', fontSize: 10, padding: '4px 8px' }}
+                >
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="cartao">Cartão</option>
+                  <option value="pix">PIX</option>
+                </select>
+              </dd>
+            </dl>
+
+            <div className="total">
+              <span>Total</span>
+              <span>{formatarValor(calcularTotal())}</span>
+            </div>
+
+            <button className="btn" type="submit" disabled={salvando}>
+              <IconCheck />
+              {salvando ? 'Finalizando...' : 'Finalizar Venda'}
+            </button>
+
             <button
+              className="btn btn-outline"
               type="button"
               onClick={() => {
                 setNovaVenda(false);
                 setItens([]);
                 setErro('');
               }}
-              disabled={salvando}
             >
               Cancelar
             </button>
 
-            <button
-              type="button"
-              onClick={finalizarVenda}
-              disabled={salvando}
-            >
-              {salvando
-                ? 'Finalizando...'
-                : 'Finalizar venda'}
-            </button>
-          </div>
-        </div>
-      ) : carregando ? (
-        <p>Carregando vendas...</p>
+            <div className="cart-title">Itens do Carrinho</div>
+
+            {itens.length > 0 ? (
+              itens.map((item) => {
+                const produto = produtos.find(
+                  (p) => p.id === item.produtoId,
+                );
+
+                return (
+                  <div className="cart-item" key={item.produtoId}>
+                    <span className="thumb" />
+                    <span className="grow">
+                      {produto?.nome} ({produto?.tamanho})
+                    </span>
+
+                    <span className="qty">
+                      <button
+                        type="button"
+                        aria-label="Diminuir"
+                        onClick={() =>
+                          alterarQuantidadeItem(
+                            item.produtoId,
+                            Math.max(1, item.quantidade - 1),
+                          )
+                        }
+                      >
+                        −
+                      </button>
+                      <input
+                        value={item.quantidade}
+                        aria-label="Quantidade"
+                        readOnly
+                      />
+                      <button
+                        type="button"
+                        aria-label="Aumentar"
+                        onClick={() =>
+                          alterarQuantidadeItem(
+                            item.produtoId,
+                            Math.min(
+                              produto?.quantidade ?? 1,
+                              item.quantidade + 1,
+                            ),
+                          )
+                        }
+                      >
+                        +
+                      </button>
+                    </span>
+
+                    <span>
+                      {formatarValor(
+                        Number(produto?.valor ?? 0) * item.quantidade,
+                      )}
+                    </span>
+
+                    <button
+                      type="button"
+                      aria-label="Remover"
+                      onClick={() => removerItem(item.produtoId)}
+                    >
+                      <IconTrash />
+                    </button>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="empty">Nenhum item adicionado.</p>
+            )}
+          </aside>
+        </form>
       ) : (
         <>
-          <div className="vendas__filtro">
-            <div>
-              <label htmlFor="dataFiltro">
-                Data da venda
-              </label>
-
+          <div className="list-filters">
+            <div className="field">
+              <span className="label-s">Data</span>
               <input
-                id="dataFiltro"
+                className="input"
+                id="data-filtro"
                 type="date"
+                aria-label="Filtrar por data"
                 value={dataFiltro}
-                onChange={(event) =>
-                  setDataFiltro(
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => setDataFiltro(event.target.value)}
               />
             </div>
 
-            <button
-              type="button"
-              onClick={filtrarPorData}
-            >
+            <button className="btn" type="button" onClick={filtrarPorData}>
               Filtrar
             </button>
 
             <button
+              className="btn btn-outline"
               type="button"
               onClick={limparFiltro}
             >
@@ -657,246 +592,164 @@ export function Vendas() {
             </button>
           </div>
 
-          {vendas.length === 0 ? (
-            <div className="vendas__vazio">
-              Nenhuma venda registrada.
-            </div>
-          ) : (
-            <>
-              <div className="vendas__tabela-container">
-                <table className="vendas__tabela">
-                  <thead>
-                    <tr>
-                      <th>
-                        Nº da venda
-                      </th>
-                      <th>Data</th>
-                      <th>Pagamento</th>
-                      <th>Total</th>
-                      <th>Status</th>
-                      <th>Ações</th>
-                    </tr>
-                  </thead>
+          <div className="card table-card">
+            {carregando ? (
+              <p className="empty">Carregando vendas...</p>
+            ) : (
+              <>
+                <div className="table-scroll">
+                  <table className="data">
+                    <thead>
+                      <tr>
+                        <th>Nº Venda</th>
+                        <th>Data</th>
+                        <th>Total</th>
+                        <th>Pagamento</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
 
-                  <tbody>
-                    {vendas.map(
-                      (venda) => (
-                        <tr key={venda.id}>
-                          <td>
-                            {
-                              venda.numero_venda
-                            }
-                          </td>
-
-                          <td>
-                            {formatarData(
-                              venda.data,
-                            )}
-                          </td>
-
-                          <td>
-                            {formatarPagamento(
-                              venda.forma_pagamento,
-                            )}
-                          </td>
-
-                          <td>
-                            {formatarValor(
-                              venda.total,
-                            )}
-                          </td>
-
-                          <td>
-                            {venda.status ===
-                            'concluida'
-                              ? 'Concluída'
-                              : 'Cancelada'}
-                          </td>
-
-                          <td>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                visualizarVenda(
-                                  venda.id,
-                                )
-                              }
-                            >
-                              Detalhes
-                            </button>
+                    <tbody>
+                      {vendas.length > 0 ? (
+                        vendas.map((venda) => (
+                          <tr key={venda.id}>
+                            <td className="strong">#{venda.numero_venda}</td>
+                            <td>{formatarData(venda.data)}</td>
+                            <td>{formatarValor(venda.total)}</td>
+                            <td>{formatarPagamento(venda.forma_pagamento)}</td>
+                            <td>
+                              <span
+                                className={`status${
+                                  venda.status === 'cancelada' ? ' off' : ''
+                                }`}
+                              >
+                                {venda.status === 'concluida'
+                                  ? 'Concluída'
+                                  : 'Cancelada'}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="actions">
+                                <button
+                                  className="btn btn-outline"
+                                  type="button"
+                                  onClick={() => visualizarVenda(venda.id)}
+                                >
+                                  Detalhes
+                                </button>
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="empty">
+                            Nenhuma venda encontrada.
                           </td>
                         </tr>
-                      ),
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-              <div className="vendas__paginacao">
-                <button
-                  type="button"
-                  onClick={
-                    paginaAnterior
-                  }
-                  disabled={
-                    meta.page <= 1
-                  }
-                >
-                  Anterior
-                </button>
+                <div className="table-foot">
+                  <span>Total de vendas: {meta.total}</span>
 
-                <span>
-                  Página {meta.page}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={
-                    proximaPagina
-                  }
-                  disabled={
-                    meta.page *
-                      meta.limit >=
-                    meta.total
-                  }
-                >
-                  Próxima
-                </button>
-
-                <span>
-                  Total de vendas:{' '}
-                  {meta.total}
-                </span>
-              </div>
-            </>
-          )}
+                  <div className="pager">
+                    <button
+                      type="button"
+                      onClick={paginaAnterior}
+                      disabled={meta.page <= 1}
+                    >
+                      ‹
+                    </button>
+                    <span className="cur">{meta.page}</span>
+                    <button
+                      type="button"
+                      onClick={proximaPagina}
+                      disabled={meta.page * meta.limit >= meta.total}
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
 
           {vendaDetalhe && (
-            <div className="vendas__detalhes">
-              <div className="vendas__detalhes-cabecalho">
-                <h3>
-                  Venda{' '}
-                  {
-                    vendaDetalhe.numero_venda
-                  }
-                </h3>
+            <section className="card" style={{ marginTop: 18 }}>
+              <div className="page-head" style={{ marginBottom: 8 }}>
+                <h2 className="lg">
+                  Venda #{vendaDetalhe.numero_venda}
+                </h2>
 
                 <button
+                  className="btn btn-outline"
                   type="button"
-                  onClick={() =>
-                    setVendaDetalhe(
-                      null,
-                    )
-                  }
+                  onClick={() => setVendaDetalhe(null)}
                 >
                   Fechar
                 </button>
               </div>
 
-              <p>
-                <strong>Data:</strong>{' '}
-                {formatarData(
-                  vendaDetalhe.data,
-                )}
-              </p>
-
-              <p>
-                <strong>
-                  Pagamento:
-                </strong>{' '}
-                {formatarPagamento(
-                  vendaDetalhe.forma_pagamento,
-                )}
-              </p>
-
-              <p>
-                <strong>Status:</strong>{' '}
-                {vendaDetalhe.status ===
-                'concluida'
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+                Data: {formatarData(vendaDetalhe.data)} · Pagamento:{' '}
+                {formatarPagamento(vendaDetalhe.forma_pagamento)} · Status:{' '}
+                {vendaDetalhe.status === 'concluida'
                   ? 'Concluída'
                   : 'Cancelada'}
               </p>
 
-              <div className="vendas__tabela-container">
-                <table className="vendas__tabela">
+              <div className="table-scroll">
+                <table className="data">
                   <thead>
                     <tr>
                       <th>Produto</th>
-                      <th>
-                        Quantidade
-                      </th>
-                      <th>
-                        Valor unitário
-                      </th>
+                      <th>Quantidade</th>
+                      <th>Valor unitário</th>
                       <th>Subtotal</th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {vendaDetalhe.itens.map(
-                      (item) => (
-                        <tr key={item.id}>
-                          <td>
-                            {
-                              item.produto_id
-                            }
-                          </td>
-
-                          <td>
-                            {
-                              item.quantidade
-                            }
-                          </td>
-
-                          <td>
-                            {formatarValor(
-                              item.valor_unitario,
-                            )}
-                          </td>
-
-                          <td>
-                            {formatarValor(
-                              Number(
-                                item.valor_unitario,
-                              ) *
-                                item.quantidade,
-                            )}
-                          </td>
-                        </tr>
-                      ),
-                    )}
+                    {vendaDetalhe.itens.map((item) => (
+                      <tr key={item.id}>
+                        <td className="strong">{item.produto_id}</td>
+                        <td>{item.quantidade}</td>
+                        <td>{formatarValor(item.valor_unitario)}</td>
+                        <td>
+                          {formatarValor(
+                            item.valor_unitario * item.quantidade,
+                          )}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
 
-              <div className="vendas__resumo">
-                <strong>
-                  Total:{' '}
-                  {formatarValor(
-                    vendaDetalhe.total,
-                  )}
-                </strong>
-              </div>
+              <div className="summary" style={{ marginTop: 12 }}>
+                <div className="total">
+                  <span>Total</span>
+                  <span>{formatarValor(vendaDetalhe.total)}</span>
+                </div>
 
-              {vendaDetalhe.status ===
-                'concluida' && (
-                <div className="vendas__acoes">
+                {vendaDetalhe.status === 'concluida' && (
                   <button
+                    className="btn btn-outline"
                     type="button"
-                    onClick={() =>
-                      cancelarVenda(
-                        vendaDetalhe.id,
-                      )
-                    }
+                    onClick={() => cancelarVenda(vendaDetalhe.id)}
                   >
                     Cancelar venda
                   </button>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            </section>
           )}
         </>
       )}
-    </div>
+    </>
   );
 }
