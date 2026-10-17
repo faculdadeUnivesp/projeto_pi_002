@@ -1,12 +1,13 @@
 import {
   Injectable,
   UnauthorizedException,
-  ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import type { SignOptions } from 'jsonwebtoken';
 import { UsuariosService } from '../usuarios/usuarios.service.js';
 import { LoginDto } from './dto/login.dto.js';
+import { AlterarSenhaDto, UpdateMeDto } from './dto/me.dto.js';
 
 @Injectable()
 export class AuthService {
@@ -40,21 +41,16 @@ export class AuthService {
     );
     await this.usuariosService.updateUltimoAcesso(usuario.id);
 
-    const { senha_hash, refresh_token, ...usuarioData } = usuario;
+    const { senha_hash: _senha_hash, refresh_token: _refresh_token, ...usuarioData } = usuario;
     return {
       ...tokens,
       usuario: usuarioData,
     };
   }
 
-  async refreshTokens(userId: string, refreshToken: string) {
-    const usuario = await this.usuariosService.findOne(userId);
+  async refreshTokens(userId: string) {
+    const usuario = await this.usuariosService.findOneWithRefreshToken(userId);
     if (!usuario || !usuario.refresh_token) {
-      throw new UnauthorizedException('Acesso negado');
-    }
-
-    const rtMatches = refreshToken === usuario.refresh_token;
-    if (!rtMatches) {
       throw new UnauthorizedException('Acesso negado');
     }
 
@@ -70,17 +66,48 @@ export class AuthService {
     await this.usuariosService.updateRefreshToken(userId, null);
   }
 
+  async updateMe(userId: string, dto: UpdateMeDto) {
+    return this.usuariosService.atualizarPerfil(userId, {
+      nome: dto.nome,
+      email: dto.email,
+      foto: dto.foto === undefined ? undefined : dto.foto || null,
+    });
+  }
+
+  async alterarSenha(userId: string, dto: AlterarSenhaDto) {
+    if (dto.senhaAtual) {
+      const ok = await this.usuariosService.verificarSenha(
+        userId,
+        dto.senhaAtual,
+      );
+      if (!ok) {
+        throw new UnauthorizedException('Senha atual incorreta');
+      }
+    }
+
+    const novaHash = await bcrypt.hash(dto.novaSenha, 10);
+    await this.usuariosService.alterarSenha(userId, novaHash);
+    await this.usuariosService.updateRefreshToken(userId, null);
+
+    return { message: 'Senha alterada com sucesso' };
+  }
+
   private async generateTokens(userId: string, email: string) {
     const payload = { sub: userId, email };
+
+    const accessExpiresIn = (process.env.JWT_EXPIRATION ||
+      '3600') as SignOptions['expiresIn'];
+    const refreshExpiresIn = (process.env.JWT_REFRESH_EXPIRATION ||
+      '604800') as SignOptions['expiresIn'];
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: process.env.JWT_SECRET,
-        expiresIn: (process.env.JWT_EXPIRATION || '3600') as any,
+        expiresIn: accessExpiresIn,
       }),
       this.jwtService.signAsync(payload, {
         secret: process.env.JWT_REFRESH_SECRET,
-        expiresIn: (process.env.JWT_REFRESH_EXPIRATION || '604800') as any,
+        expiresIn: refreshExpiresIn,
       }),
     ]);
 
