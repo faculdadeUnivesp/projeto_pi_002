@@ -41,14 +41,16 @@ export class Produto {
   @Column({
     type: 'varchar',
     length: 50,
+    nullable: true,
   })
-  material: string;
+  material: string | null;
 
   @Column({
     type: 'varchar',
     length: 10,
+    nullable: true,
   })
-  tamanho: string;
+  tamanho: string | null;
 
   @Column({
     type: 'decimal',
@@ -66,8 +68,9 @@ export class Produto {
   @Column({
     type: 'varchar',
     length: 50,
+    nullable: true,
   })
-  modelo: string;
+  modelo: string | null;
 
   @Column({
     type: 'int',
@@ -92,14 +95,15 @@ export class Produto {
     name: 'fornecedor_id',
     type: 'char',
     length: 36,
+    nullable: true,
   })
-  fornecedor_id: string;
+  fornecedor_id: string | null;
 
   @ManyToOne(() => Fornecedor)
   @JoinColumn({
     name: 'fornecedor_id',
   })
-  fornecedor: Fornecedor;
+  fornecedor: Fornecedor | null;
 
   @Column({
     type: 'enum',

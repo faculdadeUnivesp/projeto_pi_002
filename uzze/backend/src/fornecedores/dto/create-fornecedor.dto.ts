@@ -6,13 +6,14 @@ import {
   IsString,
   Length,
   Matches,
+  MaxLength,
 } from 'class-validator';
-
 import { FornecedorStatus } from '../entities/fornecedor.entity.js';
 
 export class CreateFornecedorDto {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   nome: string;
 
   @IsString()
@@ -22,48 +23,51 @@ export class CreateFornecedorDto {
   })
   cnpj: string;
 
-  @IsEmail()
-  @IsNotEmpty()
-  email: string;
-
-  @IsString()
-  @IsNotEmpty()
-  contato: string;
-
-  @IsOptional()
   @IsEnum(FornecedorStatus)
+  @IsOptional()
   status?: FornecedorStatus;
 
+  // Campos opcionais
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
+  @MaxLength(20)
+  contato?: string;
+
+  @IsOptional()
+  @IsString()
   @Matches(/^\d{5}-\d{3}$/, {
     message: 'CEP inválido',
   })
-  cep: string;
+  cep?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  rua: string;
+  rua?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  numero: string;
+  numero?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  bairro: string;
+  bairro?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  cidade: string;
+  cidade?: string;
 
+  @IsOptional()
   @IsString()
   @Length(2, 2)
-  estado: string;
+  estado?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  pais: string;
+  pais?: string;
 
   @IsOptional()
   @IsString()

@@ -12,7 +12,7 @@ import {
   Min,
 } from 'class-validator';
 
-import { ProdutoGenero, } from '../entities/produto.entity.js';
+import { ProdutoGenero } from '../entities/produto.entity.js';
 
 export class CreateProdutoDto {
   @IsString()
@@ -25,38 +25,40 @@ export class CreateProdutoDto {
   @MaxLength(50)
   categoria: string;
 
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(50)
-  material: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(10)
-  tamanho: string;
-
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
+  @Min(0.01, { message: 'O valor deve ser maior que zero' })
   valor: number;
-
-  @IsEnum(ProdutoGenero)
-  genero: ProdutoGenero;
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(50)
-  modelo: string;
 
   @Type(() => Number)
   @IsInt()
   @Min(0)
   quantidade: number;
 
+  @IsEnum(ProdutoGenero)
+  genero: ProdutoGenero;
+
+  // Campos opcionais
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  material?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  tamanho?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  modelo?: string;
+
   @IsOptional()
   @IsString()
   descricao?: string;
 
+  @IsOptional()
   @IsUUID()
-  fornecedor_id: string;
+  fornecedor_id?: string;
 }

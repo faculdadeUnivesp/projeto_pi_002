@@ -22,7 +22,7 @@ export class Fornecedor {
 
   @Column({
     type: 'varchar',
-    length: 20,
+    length: 255,
   })
   nome: string;
 
@@ -35,30 +35,34 @@ export class Fornecedor {
 
   @Column({
     type: 'varchar',
-    length: 40,
+    length: 255,
+    nullable: true,
   })
-  email: string;
+  email: string | null;
 
   @Column({
     type: 'varchar',
-    length: 11,
+    length: 20,
+    nullable: true,
   })
-  contato: string;
+  contato: string | null;
 
   @Column({
     name: 'endereco_id',
     type: 'char',
     length: 36,
+    nullable: true,
   })
-  endereco_id: string;
+  endereco_id: string | null;
 
   @OneToOne(() => Endereco, {
     eager: true,
+    nullable: true,
   })
   @JoinColumn({
     name: 'endereco_id',
   })
-  endereco: Endereco;
+  endereco: Endereco | null;
 
   @Column({
     type: 'enum',

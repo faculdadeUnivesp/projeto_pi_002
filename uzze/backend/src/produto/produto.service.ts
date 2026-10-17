@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,8 +15,13 @@ import {
   existsSync,
   unlinkSync,
 } from 'fs';
+import { resolve, isAbsolute } from 'path';
+import { buildMeta } from '../common/pagination.js';
 
-import { Fornecedor } from '../fornecedores/entities/fornecedor.entity.js';
+import {
+  Fornecedor,
+  FornecedorStatus,
+} from '../fornecedores/entities/fornecedor.entity.js';
 
 import { CreateProdutoDto } from './dto/create-produto.dto.js';
 import { UpdateProdutoDto } from './dto/update-produto.dto.js';
@@ -45,20 +52,32 @@ export class ProdutoService {
     dto: CreateProdutoDto,
     imagem?: UploadedFile,
   ): Promise<Produto> {
-    const fornecedor =
-      await this.fornecedorRepository.findOne({
-        where: {
-          id: dto.fornecedor_id,
-        },
-      });
+    if (dto.fornecedor_id) {
+      const fornecedor =
+        await this.fornecedorRepository.findOne({
+          where: {
+            id: dto.fornecedor_id,
+          },
+        });
 
-    if (!fornecedor) {
-      this.removerArquivo(imagem?.path);
+      if (!fornecedor) {
+        this.removerArquivo(imagem?.path);
 
-      throw new NotFoundException(
-        'Fornecedor não encontrado',
-      );
+        throw new ConflictException(
+          'Fornecedor não encontrado',
+        );
+      }
+
+      if (fornecedor.status === FornecedorStatus.INATIVO) {
+        this.removerArquivo(imagem?.path);
+
+        throw new BadRequestException(
+          'Não é possível cadastrar produto com fornecedor inativo',
+        );
+      }
     }
+
+    await this.verificarGradeUnica(dto);
 
     const produto =
       this.produtoRepository.create({
@@ -77,8 +96,7 @@ export class ProdutoService {
 
         descricao: dto.descricao ?? null,
 
-        fornecedor_id:
-          dto.fornecedor_id,
+        fornecedor_id: dto.fornecedor_id ?? null,
 
         status:
           ProdutoStatus.ATIVO,
@@ -236,27 +254,52 @@ async findAll(
     total,
   ] = await query.getManyAndCount();
 
-  const totalPages =
-    Math.ceil(total / limit);
-
   return {
     data: produtos,
-
-    meta: {
-      page,
-      limit,
-      total,
-      totalPages,
-
-      hasNextPage:
-        page < totalPages,
-
-      hasPreviousPage:
-        page > 1,
-    },
+    meta: buildMeta(total, page, limit),
   };
-  
+
 }
+
+  async findOpcoes(): Promise<{
+    categorias: string[];
+    materiais: string[];
+    tamanhos: string[];
+    modelos: string[];
+  }> {
+    const extrair = (registros: Array<{ valor: string }>) =>
+      registros
+        .map((registro) => registro.valor)
+        .filter((valor) => valor && valor.trim() !== '')
+        .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+    const [categorias, materiais, tamanhos, modelos] =
+      await Promise.all([
+        this.produtoRepository
+          .createQueryBuilder('produto')
+          .select('DISTINCT produto.categoria', 'valor')
+          .getRawMany(),
+        this.produtoRepository
+          .createQueryBuilder('produto')
+          .select('DISTINCT produto.material', 'valor')
+          .getRawMany(),
+        this.produtoRepository
+          .createQueryBuilder('produto')
+          .select('DISTINCT produto.tamanho', 'valor')
+          .getRawMany(),
+        this.produtoRepository
+          .createQueryBuilder('produto')
+          .select('DISTINCT produto.modelo', 'valor')
+          .getRawMany(),
+      ]);
+
+    return {
+      categorias: extrair(categorias),
+      materiais: extrair(materiais),
+      tamanhos: extrair(tamanhos),
+      modelos: extrair(modelos),
+    };
+  }
 
   async findOne(
     id: string,
@@ -304,7 +347,26 @@ async findAll(
           'Fornecedor não encontrado',
         );
       }
+
+      if (fornecedor.status === FornecedorStatus.INATIVO) {
+        this.removerArquivo(imagem?.path);
+
+        throw new BadRequestException(
+          'Não é possível vincular produto a fornecedor inativo',
+        );
+      }
     }
+
+    await this.verificarGradeUnica(
+      {
+        nome: dto.nome ?? produto.nome,
+        categoria: dto.categoria ?? produto.categoria,
+        tamanho: dto.tamanho ?? produto.tamanho ?? undefined,
+        genero: dto.genero ?? produto.genero,
+        modelo: dto.modelo ?? produto.modelo ?? undefined,
+      },
+      id,
+    );
 
     const imagemAnterior =
       produto.imagem;
@@ -375,6 +437,44 @@ async findAll(
     return this.findOne(id);
   }
 
+  private async verificarGradeUnica(
+    dto: Pick<
+      CreateProdutoDto,
+      'nome' | 'categoria' | 'tamanho' | 'genero' | 'modelo'
+    >,
+    produtoExcluirId?: string,
+  ): Promise<void> {
+    const qb = this.produtoRepository
+      .createQueryBuilder('produto')
+      .where('produto.nome = :nome', { nome: dto.nome })
+      .andWhere('produto.categoria = :categoria', {
+        categoria: dto.categoria,
+      })
+      .andWhere('produto.tamanho = :tamanho', {
+        tamanho: dto.tamanho,
+      })
+      .andWhere('produto.genero = :genero', {
+        genero: dto.genero,
+      })
+      .andWhere('produto.modelo = :modelo', {
+        modelo: dto.modelo,
+      });
+
+    if (produtoExcluirId) {
+      qb.andWhere('produto.id != :id', {
+        id: produtoExcluirId,
+      });
+    }
+
+    const duplicado = await qb.getOne();
+
+    if (duplicado) {
+      throw new ConflictException(
+        'Já existe um produto com esta grade (nome, categoria, tamanho, gênero e modelo)',
+      );
+    }
+  }
+
   private removerArquivo(
     caminho?: string | null,
   ): void {
@@ -382,20 +482,15 @@ async findAll(
       return;
     }
 
-    const caminhoNormalizado =
-      caminho.replace(
-        /^\/+/,
-        '',
-      );
+    const caminhoAbsoluto = isAbsolute(caminho)
+      ? caminho
+      : resolve(process.cwd(), caminho.replace(/^\/+/, ''));
 
-    if (
-      existsSync(
-        caminhoNormalizado,
-      )
-    ) {
-      unlinkSync(
-        caminhoNormalizado,
-      );
+    try {
+      if (existsSync(caminhoAbsoluto)) {
+        unlinkSync(caminhoAbsoluto);
+      }
+    } catch {
     }
   }
 }

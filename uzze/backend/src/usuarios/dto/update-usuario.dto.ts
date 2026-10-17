@@ -1,17 +1,25 @@
-import { IsString, IsOptional, IsEnum } from 'class-validator';
-import { UsuarioTipo, UsuarioStatus } from '../entities/usuario.entity.js';
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+import { UsuarioStatus, UsuarioTipo } from '../entities/usuario.entity.js';
 
 export class UpdateUsuarioDto {
   @IsString()
   @IsOptional()
+  @MaxLength(255)
   nome?: string;
 
-  @IsString()
+  @IsEmail({}, { message: 'Email inválido' })
   @IsOptional()
   email?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(255)
   foto?: string;
 
   @IsEnum(UsuarioTipo)

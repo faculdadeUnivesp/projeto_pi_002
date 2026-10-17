@@ -17,6 +17,7 @@ Fornecedor,
 } from './entities/fornecedor.entity.js';
 
 import { Endereco } from '../endereco/entities/endereco.entity.js';
+import { buildMeta, type PaginatedMeta } from '../common/pagination.js';
 
 @Injectable()
 export class FornecedoresService {
@@ -45,24 +46,36 @@ export class FornecedoresService {
 
     return this.dataSource.transaction(
       async (manager) => {
-        const endereco = manager.create(
-          Endereco,
-          {
-            cep: createFornecedorDto.cep,
-            rua: createFornecedorDto.rua,
-            numero: createFornecedorDto.numero,
-            bairro: createFornecedorDto.bairro,
-            cidade: createFornecedorDto.cidade,
-            estado: createFornecedorDto.estado,
-            pais: createFornecedorDto.pais,
-            complemento:
-              createFornecedorDto.complemento ??
-              null,
-          },
-        );
+        const temEndereco =
+          createFornecedorDto.cep ||
+          createFornecedorDto.rua ||
+          createFornecedorDto.numero ||
+          createFornecedorDto.bairro ||
+          createFornecedorDto.cidade ||
+          createFornecedorDto.estado;
 
-        const enderecoSalvo =
-          await manager.save(endereco);
+        let endereco_id: string | null = null;
+
+        if (temEndereco) {
+          const endereco = manager.create(
+            Endereco,
+            {
+              cep: createFornecedorDto.cep ?? '',
+              rua: createFornecedorDto.rua ?? '',
+              numero: createFornecedorDto.numero ?? '',
+              bairro: createFornecedorDto.bairro ?? '',
+              cidade: createFornecedorDto.cidade ?? '',
+              estado: createFornecedorDto.estado ?? '',
+              pais: createFornecedorDto.pais ?? 'Brasil',
+              complemento:
+                createFornecedorDto.complemento ?? null,
+            },
+          );
+
+          const enderecoSalvo =
+            await manager.save(endereco);
+          endereco_id = enderecoSalvo.id;
+        }
 
         const fornecedor = manager.create(
           Fornecedor,
@@ -76,7 +89,7 @@ export class FornecedoresService {
               createFornecedorDto.status ??
               FornecedorStatus.ATIVO,
 
-            endereco_id: enderecoSalvo.id,
+            endereco_id,
           },
         );
 
@@ -99,16 +112,40 @@ export class FornecedoresService {
     );
   }
 
-  async findAll(): Promise<Fornecedor[]> {
-    return this.fornecedorRepository.find({
-      relations: {
-        endereco: true,
-      },
+  async findAll(
+    page = 1,
+    limit = 10,
+    status?: FornecedorStatus,
+    busca?: string,
+  ): Promise<{
+    data: Fornecedor[];
+    meta: PaginatedMeta;
+  }> {
+    const qb = this.fornecedorRepository
+      .createQueryBuilder('fornecedor')
+      .leftJoinAndSelect('fornecedor.endereco', 'endereco');
 
-      order: {
-        nome: 'ASC',
-      },
-    });
+    if (status) {
+      qb.andWhere('fornecedor.status = :status', { status });
+    }
+
+    if (busca) {
+      qb.andWhere(
+        '(fornecedor.nome LIKE :busca OR fornecedor.cnpj LIKE :busca OR fornecedor.email LIKE :busca OR fornecedor.contato LIKE :busca)',
+        { busca: `%${busca}%` },
+      );
+    }
+
+    qb.orderBy('fornecedor.nome', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+
+    return {
+      data,
+      meta: buildMeta(total, page, limit),
+    };
   }
 
   async findOne(
@@ -190,62 +227,49 @@ export class FornecedoresService {
             updateFornecedorDto.status;
         }
 
-        const endereco = fornecedor.endereco;
+        const camposEndereco = [
+          'cep',
+          'rua',
+          'numero',
+          'bairro',
+          'cidade',
+          'estado',
+          'pais',
+          'complemento',
+        ] as const;
 
-        if (updateFornecedorDto.cep !== undefined) {
-          endereco.cep =
-            updateFornecedorDto.cep;
-        }
-
-        if (updateFornecedorDto.rua !== undefined) {
-          endereco.rua =
-            updateFornecedorDto.rua;
-        }
-
-        if (
-          updateFornecedorDto.numero !== undefined
-        ) {
-          endereco.numero =
-            updateFornecedorDto.numero;
-        }
-
-        if (
-          updateFornecedorDto.bairro !== undefined
-        ) {
-          endereco.bairro =
-            updateFornecedorDto.bairro;
-        }
-
-        if (
-          updateFornecedorDto.cidade !== undefined
-        ) {
-          endereco.cidade =
-            updateFornecedorDto.cidade;
-        }
-
-        if (
-          updateFornecedorDto.estado !== undefined
-        ) {
-          endereco.estado =
-            updateFornecedorDto.estado;
-        }
-
-        if (updateFornecedorDto.pais !== undefined) {
-          endereco.pais =
-            updateFornecedorDto.pais;
-        }
-
-        if (
-          updateFornecedorDto.complemento !== undefined
-        ) {
-          endereco.complemento =
-            updateFornecedorDto.complemento;
-        }
-
-        await manager.save(
-          Endereco,
-          endereco,
+        const algumCampoEndereco = camposEndereco.some(
+          (c) => updateFornecedorDto[c] !== undefined,
         );
+
+        if (algumCampoEndereco) {
+          let endereco = fornecedor.endereco;
+
+          if (!endereco) {
+            endereco = manager.create(Endereco, {
+              cep: '',
+              rua: '',
+              numero: '',
+              bairro: '',
+              cidade: '',
+              estado: '',
+              pais: 'Brasil',
+              complemento: null,
+            });
+            endereco = await manager.save(endereco);
+            fornecedor.endereco_id = endereco.id;
+            fornecedor.endereco = endereco;
+          }
+
+          for (const campo of camposEndereco) {
+            const valor = updateFornecedorDto[campo];
+            if (valor !== undefined) {
+              (endereco as unknown as Record<string, unknown>)[campo] = valor;
+            }
+          }
+
+          await manager.save(Endereco, endereco);
+        }
 
         await manager.save(
           Fornecedor,

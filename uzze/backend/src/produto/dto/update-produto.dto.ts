@@ -25,6 +25,22 @@ export class UpdateProdutoDto {
   categoria?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01, { message: 'O valor deve ser maior que zero' })
+  valor?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  quantidade?: number;
+
+  @IsOptional()
+  @IsEnum(ProdutoGenero)
+  genero?: ProdutoGenero;
+
+  @IsOptional()
   @IsString()
   @MaxLength(50)
   material?: string;
@@ -35,25 +51,9 @@ export class UpdateProdutoDto {
   tamanho?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  valor?: number;
-
-  @IsOptional()
-  @IsEnum(ProdutoGenero)
-  genero?: ProdutoGenero;
-
-  @IsOptional()
   @IsString()
   @MaxLength(50)
   modelo?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  quantidade?: number;
 
   @IsOptional()
   @IsString()
