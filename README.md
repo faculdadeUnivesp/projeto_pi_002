@@ -67,7 +67,7 @@ O frontend estará disponível em `http://localhost:5173`.
 
 | Comando | Descrição |
 |---------|-----------|
-| `npm run dev` | Rodar em modo desenvolvimento (watch) |
+| `npm run start:dev` | Rodar em modo desenvolvimento (watch) |
 | `npm run build` | Gerar build de produção |
 | `npm run migration:run` | Executar migrations |
 | `npm run migration:generate -- src/database/migrations/nome` | Gerar migration a partir de mudanças na entity |
