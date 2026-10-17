@@ -10,7 +10,6 @@ import {
   Post,
   Query,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 
@@ -28,9 +27,10 @@ import {
 
 import {
   mkdirSync,
+  readFileSync,
 } from 'fs';
 
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { randomUUID } from 'crypto';
 
 import { CreateProdutoDto } from './dto/create-produto.dto.js';
 import { UpdateProdutoDto } from './dto/update-produto.dto.js';
@@ -43,16 +43,41 @@ import type { UploadedFile as ProdutoUploadedFile } from './types/uploaded-file.
 const pastaProdutos =
   './uploads/produtos';
 
-mkdirSync(
-  pastaProdutos,
-  {
-    recursive: true,
-  },
-);
+const MAGIC_BYTES: Record<string, number[]> = {
+  'image/jpeg': [0xff, 0xd8, 0xff],
+  'image/png': [0x89, 0x50, 0x4e, 0x47],
+  'image/webp': [0x52, 0x49, 0x46, 0x46],
+};
+
+function magicBytesValidos(
+  buffer: Buffer,
+  mimetype: string,
+): boolean {
+  const expected = MAGIC_BYTES[mimetype];
+  if (!expected) return false;
+  if (buffer.length < expected.length) return false;
+  return expected.every(
+    (byte, index) => buffer[index] === byte,
+  );
+}
 
 const configuracaoUpload = {
   storage: diskStorage({
-    destination: pastaProdutos,
+    destination: (
+      _req: unknown,
+      _file: Express.Multer.File,
+      callback: (error: Error | null, destination: string) => void,
+    ) => {
+      try {
+        mkdirSync(pastaProdutos, { recursive: true });
+        callback(null, pastaProdutos);
+      } catch (err) {
+        callback(
+          err instanceof Error ? err : new Error(String(err)),
+          pastaProdutos,
+        );
+      }
+    },
 
     filename: (
       req: unknown,
@@ -62,10 +87,8 @@ const configuracaoUpload = {
         filename: string,
       ) => void,
     ) => {
-      const nomeArquivo =
-        `${Date.now()}-${Math.round(
-          Math.random() * 1e9,
-        )}${extname(file.originalname)}`;
+      const extensao = extname(file.originalname).toLowerCase();
+      const nomeArquivo = `${randomUUID()}${extensao}`;
 
       callback(
         null,
@@ -85,14 +108,30 @@ const configuracaoUpload = {
     const formatosPermitidos =
       /^image\/(jpeg|png|webp)$/;
 
-    if (
-      !file.mimetype.match(
-        formatosPermitidos,
-      )
-    ) {
+    if (!file.mimetype.match(formatosPermitidos)) {
       return callback(
         new BadRequestException(
           'Apenas imagens JPEG, PNG ou WEBP são permitidas',
+        ),
+        false,
+      );
+    }
+
+    const path = file.path;
+    let buffer: Buffer;
+    try {
+      buffer = readFileSync(path);
+    } catch {
+      return callback(
+        new BadRequestException('Não foi possível ler o arquivo enviado'),
+        false,
+      );
+    }
+
+    if (!magicBytesValidos(buffer, file.mimetype)) {
+      return callback(
+        new BadRequestException(
+          'O conteúdo do arquivo não corresponde ao tipo declarado',
         ),
         false,
       );
@@ -110,7 +149,6 @@ const configuracaoUpload = {
   },
 };
 
-@UseGuards(JwtAuthGuard)
 @Controller('produtos')
 export class ProdutoController {
   constructor(
@@ -136,6 +174,14 @@ export class ProdutoController {
       dto,
       imagem,
     );
+  }
+
+  // MUST be declared before @Get(':id') below so that the literal path
+  // "opcoes" is not consumed by the dynamic :id route and rejected by
+  // ParseUUIDPipe.
+  @Get('opcoes')
+  findOpcoes() {
+    return this.produtoService.findOpcoes();
   }
 
   @Get()

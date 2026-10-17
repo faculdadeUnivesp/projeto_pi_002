@@ -4,42 +4,62 @@ import {
   Body,
   HttpCode,
   HttpStatus,
-  UseGuards,
   Get,
+  Patch,
   Req,
+  UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
+import { AlterarSenhaDto, UpdateMeDto } from './dto/me.dto.js';
+import { Public } from './decorators/public.decorator.js';
 import { JwtRefreshAuthGuard } from './guards/jwt-refresh.guard.js';
-import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
+import { UsuarioTipo } from '../usuarios/entities/usuario.entity.js';
+
+interface AuthRequest extends Request {
+  user: { id: string; email: string; tipo: UsuarioTipo };
+}
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
   }
 
+  @Public()
   @UseGuards(JwtRefreshAuthGuard)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  refresh(@Req() req: any) {
-    return this.authService.refreshTokens(req.user.id, req.headers.authorization?.replace('Bearer ', ''));
+  refresh(@Req() req: AuthRequest) {
+    return this.authService.refreshTokens(req.user.id);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  logout(@Req() req: any) {
+  logout(@Req() req: AuthRequest) {
     return this.authService.logout(req.user.id);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('me')
-  getProfile(@Req() req: any) {
+  getProfile(@Req() req: AuthRequest) {
     return req.user;
+  }
+
+  @Patch('me')
+  @HttpCode(HttpStatus.OK)
+  updateMe(@Req() req: AuthRequest, @Body() dto: UpdateMeDto) {
+    return this.authService.updateMe(req.user.id, dto);
+  }
+
+  @Post('alterar-senha')
+  @HttpCode(HttpStatus.OK)
+  alterarSenha(@Req() req: AuthRequest, @Body() dto: AlterarSenhaDto) {
+    return this.authService.alterarSenha(req.user.id, dto);
   }
 }

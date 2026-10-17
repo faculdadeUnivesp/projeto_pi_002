@@ -1,6 +1,7 @@
-import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UsuarioTipo } from '../../usuarios/entities/usuario.entity.js';
+import { ROLES_KEY } from '../decorators/roles.decorator.js';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -8,15 +9,19 @@ export class RolesGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<UsuarioTipo[]>(
-      'roles',
+      ROLES_KEY,
       [context.getHandler(), context.getClass()],
     );
 
-    if (!requiredRoles) {
+    if (!requiredRoles || requiredRoles.length === 0) {
       return true;
     }
 
     const { user } = context.switchToHttp().getRequest();
-    return requiredRoles.includes(user.tipo);
+    const tipo = user?.tipo as UsuarioTipo | undefined;
+    if (!tipo) {
+      throw new UnauthorizedException('Usuário sem tipo definido');
+    }
+    return requiredRoles.includes(tipo);
   }
 }

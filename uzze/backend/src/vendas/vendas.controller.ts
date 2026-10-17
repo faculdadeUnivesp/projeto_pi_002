@@ -3,27 +3,26 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { VendasService } from './vendas.service.js';
 import { CreateVendaDto } from './dto/create-venda.dto.js';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { UsuarioTipo } from '../usuarios/entities/usuario.entity.js';
 
 interface RequestComUsuario extends Request {
   user: {
     id: string;
     email: string;
-    tipo: string;
+    tipo: UsuarioTipo;
   };
 }
 
 @Controller('vendas')
-@UseGuards(JwtAuthGuard)
 export class VendasController {
   constructor(
     private readonly vendasService: VendasService,
@@ -41,6 +40,7 @@ export class VendasController {
   }
   @Get()
 async listar(
+  @Req() req: RequestComUsuario,
   @Query('page') page = '1',
   @Query('limit') limit = '10',
   @Query('data') data?: string,
@@ -49,17 +49,27 @@ async listar(
     Number(page),
     Number(limit),
     data,
+    {
+      vendedorId: req.user.id,
+      isAdmin: req.user.tipo === UsuarioTipo.ADMIN,
+    },
   );
 }
 
 
 @Get(':id')
-async buscarPorId(@Param('id') id: string) {
-  return this.vendasService.buscarPorId(id);
+async buscarPorId(
+  @Param('id', ParseUUIDPipe) id: string,
+  @Req() req: RequestComUsuario,
+) {
+  return this.vendasService.buscarPorId(id, {
+    vendedorId: req.user.id,
+    isAdmin: req.user.tipo === UsuarioTipo.ADMIN,
+  });
 }
 @Patch(':id/cancelar')
 async cancelar(
-  @Param('id') id: string,
+  @Param('id', ParseUUIDPipe) id: string,
   @Req() req: RequestComUsuario,
 ) {
   return this.vendasService.cancelar(
