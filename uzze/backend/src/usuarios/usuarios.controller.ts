@@ -7,16 +7,23 @@ import {
   Param,
   Delete,
   Query,
+  Req,
   UseGuards,
   ParseUUIDPipe,
+  ForbiddenException,
 } from '@nestjs/common';
-import { UsuariosService } from './usuarios.service.js';
+import type { Request } from 'express';
+import { UsuariosService, AuthenticatedUser } from './usuarios.service.js';
 import { CreateUsuarioDto } from './dto/create-usuario.dto.js';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { UsuarioTipo } from './entities/usuario.entity.js';
+
+interface RequestComUsuario extends Request {
+  user: AuthenticatedUser;
+}
 
 @Controller('usuarios')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -46,7 +53,17 @@ export class UsuariosController {
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestComUsuario,
+  ) {
+    const isAdmin = req.user.tipo === UsuarioTipo.ADMIN;
+    const isSelf = req.user.id === id;
+    if (!isAdmin && !isSelf) {
+      throw new ForbiddenException(
+        'Você só pode consultar o seu próprio usuário',
+      );
+    }
     return this.usuariosService.findOne(id);
   }
 
@@ -54,8 +71,9 @@ export class UsuariosController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateUsuarioDto: UpdateUsuarioDto,
+    @Req() req: RequestComUsuario,
   ) {
-    return this.usuariosService.update(id, updateUsuarioDto);
+    return this.usuariosService.update(id, updateUsuarioDto, req.user);
   }
 
   @Delete(':id')
