@@ -19,8 +19,28 @@ export async function getMe(): Promise<Usuario> {
 
 export async function updateMe(
   data: Partial<Pick<Usuario, 'nome' | 'email' | 'foto'>>,
+  foto?: File,
 ): Promise<Usuario> {
-  const response = await api.patch<{ data: Usuario }>('/auth/me', data);
+  let payload: Partial<Pick<Usuario, 'nome' | 'email' | 'foto'>> | FormData =
+    data;
+
+  if (foto) {
+    const formData = new FormData();
+
+    if (data.nome !== undefined) {
+      formData.append('nome', data.nome);
+    }
+
+    if (data.email !== undefined) {
+      formData.append('email', data.email);
+    }
+
+    formData.append('foto', foto);
+
+    payload = formData;
+  }
+
+  const response = await api.patch<{ data: Usuario }>('/auth/me', payload);
   return response.data.data;
 }
 

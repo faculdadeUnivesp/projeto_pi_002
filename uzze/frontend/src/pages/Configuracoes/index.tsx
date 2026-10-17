@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 
 import { useAuth } from '../../hooks/useAuth';
 import * as authService from '../../services/auth.service';
 import { IconCheck } from '../../components/common/Icons';
+import { assetUrl } from '../../utils/assets';
 
 export function Configuracoes() {
   const { user, refreshUser } = useAuth();
@@ -11,6 +12,9 @@ export function Configuracoes() {
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [foto, setFoto] = useState('');
+  const [fotoAtual, setFotoAtual] = useState('');
+  const [previewFoto, setPreviewFoto] = useState<string | null>(null);
+  const [arquivoFoto, setArquivoFoto] = useState<File | null>(null);
 
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
@@ -25,11 +29,24 @@ export function Configuracoes() {
 
   useEffect(() => {
     if (user) {
+      const fotoServidor = user.foto ?? '';
+
       setNome(user.nome);
       setEmail(user.email);
-      setFoto(user.foto ?? '');
+      setFoto(/^https?:\/\//.test(fotoServidor) ? fotoServidor : '');
+      setFotoAtual(fotoServidor);
+      setPreviewFoto(assetUrl(fotoServidor));
+      setArquivoFoto(null);
     }
   }, [user]);
+
+  useEffect(() => {
+    return () => {
+      if (previewFoto?.startsWith('blob:')) {
+        URL.revokeObjectURL(previewFoto);
+      }
+    };
+  }, [previewFoto]);
 
   if (!user) {
     return <p className="empty">Carregando...</p>;
@@ -39,10 +56,43 @@ export function Configuracoes() {
     if (!nome.trim()) return 'Informe seu nome.';
     if (!email.trim()) return 'Informe seu e-mail.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'E-mail inválido.';
-    if (foto && !/^https?:\/\//.test(foto)) {
+    if (!arquivoFoto && foto && !/^https?:\/\//.test(foto)) {
       return 'A foto deve ser uma URL começando com http:// ou https://';
     }
     return '';
+  };
+
+  const selecionarFoto = (event: ChangeEvent<HTMLInputElement>) => {
+    const arquivo = event.target.files?.[0];
+
+    if (!arquivo) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(arquivo.type)) {
+      setErroPerfil('Selecione uma imagem JPEG, PNG ou WEBP.');
+      return;
+    }
+
+    if (arquivo.size > 5 * 1024 * 1024) {
+      setErroPerfil('A imagem deve possuir no máximo 5 MB.');
+      return;
+    }
+
+    setErroPerfil('');
+    setArquivoFoto(arquivo);
+    setPreviewFoto(URL.createObjectURL(arquivo));
+    event.target.value = '';
+  };
+
+  const alterarFotoUrl = (valor: string) => {
+    setFoto(valor);
+
+    if (valor.trim()) {
+      setArquivoFoto(null);
+      setPreviewFoto(valor.trim());
+      return;
+    }
+
+    setPreviewFoto(assetUrl(fotoAtual));
   };
 
   const salvarPerfil = async (e: FormEvent) => {
@@ -59,13 +109,21 @@ export function Configuracoes() {
     try {
       setSalvandoPerfil(true);
 
-      const atualizado = await authService.updateMe({
-        nome: nome.trim(),
-        email: email.trim(),
-        foto: foto.trim() || undefined,
-      });
+      const atualizado = await authService.updateMe(
+        {
+          nome: nome.trim(),
+          email: email.trim(),
+          foto: arquivoFoto ? undefined : foto.trim() || undefined,
+        },
+        arquivoFoto ?? undefined,
+      );
 
-      setFoto(atualizado.foto ?? '');
+      const fotoServidor = atualizado.foto ?? '';
+
+      setFoto(/^https?:\/\//.test(fotoServidor) ? fotoServidor : '');
+      setFotoAtual(fotoServidor);
+      setPreviewFoto(assetUrl(fotoServidor));
+      setArquivoFoto(null);
       setMsgPerfil('Perfil atualizado com sucesso.');
       await refreshUser();
     } catch (error: unknown) {
@@ -176,9 +234,25 @@ export function Configuracoes() {
               type="url"
               placeholder="https://exemplo.com/foto.jpg"
               value={foto}
-              onChange={(e) => setFoto(e.target.value)}
+              onChange={(e) => alterarFotoUrl(e.target.value)}
             />
-            {foto && (
+
+            <div style={{ marginTop: 10 }}>
+              <label htmlFor="foto-arquivo">Ou envie uma imagem</label>
+              <input
+                className="input"
+                id="foto-arquivo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={selecionarFoto}
+              />
+              <small className="muted">
+                JPEG, PNG ou WEBP, com no máximo 5 MB. O arquivo substitui a
+                URL informada.
+              </small>
+            </div>
+
+            {previewFoto && (
               <div
                 style={{
                   marginTop: 8,
@@ -188,7 +262,8 @@ export function Configuracoes() {
                 }}
               >
                 <img
-                  src={foto}
+                  key={previewFoto}
+                  src={previewFoto}
                   alt="Pré-visualização"
                   style={{
                     width: 64,
@@ -202,7 +277,11 @@ export function Configuracoes() {
                       'none';
                   }}
                 />
-                <small className="muted">Pré-visualização</small>
+                <small className="muted">
+                  {arquivoFoto
+                    ? `Arquivo selecionado: ${arquivoFoto.name}`
+                    : 'Pré-visualização'}
+                </small>
               </div>
             )}
           </div>

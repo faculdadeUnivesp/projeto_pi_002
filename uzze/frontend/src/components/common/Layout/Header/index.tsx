@@ -1,7 +1,10 @@
 import { useAuth } from '../../../../hooks/useAuth';
+import { assetUrl } from '../../../../utils/assets';
 
 export function Header() {
   const { user } = useAuth();
+
+  const fotoUrl = assetUrl(user?.foto);
 
   const iniciais =
     user?.nome
@@ -17,7 +20,13 @@ export function Header() {
   return (
     <header className="topbar">
       <div className="user">
-        <div className="avatar">{iniciais}</div>
+        <div className="avatar">
+          {fotoUrl ? (
+            <img src={fotoUrl} alt={`Foto de ${user?.nome ?? 'usuário'}`} />
+          ) : (
+            iniciais
+          )}
+        </div>
         <div>
           <b>{user?.nome}</b>
           <small>{perfil}</small>

@@ -8,6 +8,10 @@ import type { SignOptions } from 'jsonwebtoken';
 import { UsuariosService } from '../usuarios/usuarios.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { AlterarSenhaDto, UpdateMeDto } from './dto/me.dto.js';
+import {
+  removerArquivo,
+  type UploadedImage,
+} from '../common/image-upload.js';
 
 @Injectable()
 export class AuthService {
@@ -66,12 +70,42 @@ export class AuthService {
     await this.usuariosService.updateRefreshToken(userId, null);
   }
 
-  async updateMe(userId: string, dto: UpdateMeDto) {
-    return this.usuariosService.atualizarPerfil(userId, {
-      nome: dto.nome,
-      email: dto.email,
-      foto: dto.foto === undefined ? undefined : dto.foto || null,
-    });
+  async updateMe(
+    userId: string,
+    dto: UpdateMeDto,
+    foto?: UploadedImage,
+  ) {
+    try {
+      const usuarioAtual =
+        await this.usuariosService.findOne(userId);
+
+      const novaFoto = foto
+        ? `uploads/usuarios/${foto.filename}`
+        : dto.foto === undefined
+          ? undefined
+          : dto.foto || null;
+
+      const atualizado =
+        await this.usuariosService.atualizarPerfil(userId, {
+          nome: dto.nome,
+          email: dto.email,
+          foto: novaFoto,
+        });
+
+      if (
+        foto &&
+        usuarioAtual.foto &&
+        usuarioAtual.foto !== novaFoto &&
+        usuarioAtual.foto.startsWith('uploads/usuarios/')
+      ) {
+        removerArquivo(usuarioAtual.foto);
+      }
+
+      return atualizado;
+    } catch (error) {
+      removerArquivo(foto?.path);
+      throw error;
+    }
   }
 
   async alterarSenha(userId: string, dto: AlterarSenhaDto) {

@@ -7,8 +7,11 @@ import {
   Get,
   Patch,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -16,6 +19,16 @@ import { AlterarSenhaDto, UpdateMeDto } from './dto/me.dto.js';
 import { Public } from './decorators/public.decorator.js';
 import { JwtRefreshAuthGuard } from './guards/jwt-refresh.guard.js';
 import { UsuarioTipo } from '../usuarios/entities/usuario.entity.js';
+import {
+  configuracaoUploadImagem,
+  type UploadedImage,
+  validarConteudoImagem,
+} from '../common/image-upload.js';
+
+const pastaUsuarios = './uploads/usuarios';
+
+const configuracaoUploadUsuario =
+  configuracaoUploadImagem(pastaUsuarios);
 
 interface AuthRequest extends Request {
   user: { id: string; email: string; tipo: UsuarioTipo };
@@ -53,8 +66,20 @@ export class AuthController {
 
   @Patch('me')
   @HttpCode(HttpStatus.OK)
-  updateMe(@Req() req: AuthRequest, @Body() dto: UpdateMeDto) {
-    return this.authService.updateMe(req.user.id, dto);
+  @UseInterceptors(
+    FileInterceptor(
+      'foto',
+      configuracaoUploadUsuario,
+    ),
+  )
+  updateMe(
+    @Req() req: AuthRequest,
+    @Body() dto: UpdateMeDto,
+    @UploadedFile() foto?: UploadedImage,
+  ) {
+    validarConteudoImagem(foto);
+
+    return this.authService.updateMe(req.user.id, dto, foto);
   }
 
   @Post('alterar-senha')

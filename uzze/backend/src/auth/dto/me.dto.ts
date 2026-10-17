@@ -5,6 +5,7 @@ import {
   IsUrl,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 export class UpdateMeDto {
@@ -20,6 +21,7 @@ export class UpdateMeDto {
   @IsString()
   @IsOptional()
   @MaxLength(255)
+  @ValidateIf((_object, value) => value !== '')
   @IsUrl({}, { message: 'Foto deve ser uma URL válida' })
   foto?: string;
 }
