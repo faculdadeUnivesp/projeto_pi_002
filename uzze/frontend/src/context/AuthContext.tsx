@@ -1,6 +1,5 @@
 import {
   createContext,
-  useContext,
   useState,
   useEffect,
 } from 'react';
@@ -8,19 +7,31 @@ import type { ReactNode } from 'react';
 import type { Usuario } from '../types/auth';
 import * as authService from '../services/auth.service';
 
-interface AuthContextData {
+export interface AuthContextData {
   user: Usuario | null;
   isAuthenticated: boolean;
   loading: boolean;
   login: (cpf: string, senha: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextData>({} as AuthContextData);
+export const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Usuario | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const refreshUser = async () => {
+    try {
+      const usuario = await authService.getMe();
+      setUser(usuario);
+    } catch {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      setUser(null);
+    }
+  };
 
   useEffect(() => {
     const loadUser = async () => {
@@ -30,15 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      try {
-        const usuario = await authService.getMe();
-        setUser(usuario);
-      } catch {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-      } finally {
-        setLoading(false);
-      }
+      await refreshUser();
+      setLoading(false);
     };
 
     loadUser();
@@ -64,17 +68,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         login,
         logout,
+        refreshUser,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth deve ser usado dentro de um AuthProvider');
-  }
-  return context;
 }

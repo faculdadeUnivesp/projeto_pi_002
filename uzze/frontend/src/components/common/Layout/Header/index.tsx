@@ -1,30 +1,27 @@
-import { useAuth } from '../../../../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../../hooks/useAuth';
 
 export function Header() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
+  const iniciais =
+    user?.nome
+      ?.split(' ')
+      .filter((parte) => parte.length > 0)
+      .map((parte) => parte[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || '?';
+
+  const perfil = user?.tipo === 'admin' ? 'Administrador' : 'Vendedor';
 
   return (
-    <header className="header">
-      <div className="header__title">
-        <span>Gestão de Estoque</span>
-      </div>
-      <div className="header__user">
-        <span className="header__username">{user?.nome}</span>
-        <span className="header__role">{user?.tipo}</span>
-        <button
-          className="header__logout"
-          onClick={handleLogout}
-          type="button"
-        >
-          Sair
-        </button>
+    <header className="topbar">
+      <div className="user">
+        <div className="avatar">{iniciais}</div>
+        <div>
+          <b>{user?.nome}</b>
+          <small>{perfil}</small>
+        </div>
       </div>
     </header>
   );
