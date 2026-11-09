@@ -11,6 +11,9 @@ import { Layout } from '../components/common/Layout';
 import { Fornecedores } from '../pages/Fornecedores';
 import { CadastroFornecedores } from '../pages/CadastroFornecedores';
 
+import { Clientes } from '../pages/Clientes';
+import { CadastroCliente } from '../pages/CadastroCliente';
+
 import { Estoque } from '../pages/Estoque';
 import { CadastroEstoque } from '../pages/CadastroEstoque';
 
@@ -39,6 +42,12 @@ export function AppRoutes() {
             path="/fornecedores/:id/editar"
             element={<CadastroFornecedores />}
           />
+
+          <Route path="/clientes" element={<Clientes />} />
+          <Route element={<RoleRoute roles={['admin']} />}>
+            <Route path="/clientes/cadastrar" element={<CadastroCliente />} />
+            <Route path="/clientes/:id/editar" element={<CadastroCliente />} />
+          </Route>
 
           <Route path="/estoque" element={<Estoque />} />
           <Route path="/estoque/cadastrar" element={<CadastroEstoque />} />

@@ -5,6 +5,7 @@ import {
   IconVendas,
   IconEstoque,
   IconFornecedores,
+  IconClientes,
   IconRelatorios,
   IconUsuarios,
   IconSettings,
@@ -46,6 +47,11 @@ export function Sidebar() {
         <NavLink to="/fornecedores">
           <IconFornecedores />
           Fornecedores
+        </NavLink>
+
+        <NavLink to="/clientes">
+          <IconClientes />
+          Clientes
         </NavLink>
 
         <NavLink to="/relatorios">

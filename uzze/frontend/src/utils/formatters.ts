@@ -18,6 +18,18 @@ export function formatCnpj(value: string | null | undefined): string {
     .replace(/(\d{4})(\d)/, '$1-$2');
 }
 
+/**
+ * Formata CPF ou CNPJ de acordo com a quantidade de dígitos informados:
+ * até 11 dígitos -> CPF (000.000.000-00); acima -> CNPJ (00.000.000/0000-00).
+ */
+export function formatCpfCnpj(value: string | null | undefined): string {
+  const digits = safe(value).replace(/\D/g, '').slice(0, 14);
+  if (digits.length <= 11) {
+    return formatCpf(digits);
+  }
+  return formatCnpj(digits);
+}
+
 export function formatCep(value: string | null | undefined): string {
   return safe(value)
     .replace(/\D/g, '')

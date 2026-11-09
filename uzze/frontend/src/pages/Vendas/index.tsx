@@ -50,6 +50,11 @@ interface ItemSelecionado {
   quantidade: number;
 }
 
+interface Cliente {
+  id: string;
+  nome: string;
+}
+
 interface Meta {
   total: number;
   page: number;
@@ -61,7 +66,10 @@ type FormaPagamento = 'dinheiro' | 'cartao' | 'pix';
 export function Vendas() {
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [itens, setItens] = useState<ItemSelecionado[]>([]);
+
+  const [clienteId, setClienteId] = useState('');
 
   const [meta, setMeta] = useState<Meta>({
     total: 0,
@@ -124,6 +132,18 @@ export function Vendas() {
     }
   }
 
+  async function carregarClientes() {
+    try {
+      const response = await api.get('/clientes', {
+        params: { limit: 100, status: 'ativo' },
+      });
+
+      setClientes(response.data.data ?? []);
+    } catch {
+      setErro('Não foi possível carregar os clientes.');
+    }
+  }
+
   useEffect(() => {
     carregarVendas();
   }, []);
@@ -134,8 +154,10 @@ export function Vendas() {
     setItens([]);
     setBuscaProduto('');
     setQuantidades({});
+    setClienteId('');
 
     await carregarProdutos();
+    await carregarClientes();
 
     setNovaVenda(true);
   }
@@ -211,6 +233,7 @@ export function Vendas() {
 
       await api.post('/vendas', {
         formaPagamento,
+        ...(clienteId ? { clienteId } : {}),
         itens,
       });
 
@@ -453,6 +476,23 @@ export function Vendas() {
             <dl>
               <dt>Subtotal ({contarItens()} itens)</dt>
               <dd>{formatarValor(calcularTotal())}</dd>
+
+              <dt>Cliente (opcional)</dt>
+              <dd>
+                <select
+                  className="select"
+                  value={clienteId}
+                  onChange={(event) => setClienteId(event.target.value)}
+                  style={{ width: 'auto', fontSize: 10, padding: '4px 8px' }}
+                >
+                  <option value="">Sem cliente</option>
+                  {clientes.map((cliente) => (
+                    <option key={cliente.id} value={cliente.id}>
+                      {cliente.nome}
+                    </option>
+                  ))}
+                </select>
+              </dd>
 
               <dt>Forma de pagamento</dt>
               <dd>
