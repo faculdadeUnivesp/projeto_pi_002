@@ -59,7 +59,8 @@ export function Relatorios() {
   }
 
   function formatarData(data: string) {
-    const partes = data.split('-');
+    const somenteData = data.split('T')[0];
+    const partes = somenteData.split('-');
 
     if (partes.length === 3) {
       return `${partes[2]}/${partes[1]}/${partes[0]}`;
