@@ -38,6 +38,15 @@ interface ApiResponse<T> {
   data: T;
 }
 
+interface EnderecoViacep {
+  cep: string;
+  rua: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  complemento: string;
+}
+
 const formularioInicial: FornecedorForm = {
   nome: '',
   cnpj: '',
@@ -65,6 +74,7 @@ export function CadastroFornecedores() {
   const [status, setStatus] = useState<'ativo' | 'inativo'>('ativo');
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [buscandoCep, setBuscandoCep] = useState(false);
   const [erro, setErro] = useState('');
 
   useEffect(() => {
@@ -136,6 +146,40 @@ export function CadastroFornecedores() {
         [campo]: valorFormatado,
       },
     }));
+  };
+
+  const buscarEnderecoPorCep = async () => {
+    const cepLimpo = formulario.endereco.cep.replace(/\D/g, '');
+
+    if (cepLimpo.length !== 8) {
+      return;
+    }
+
+    try {
+      setBuscandoCep(true);
+
+      const response = await api.get<ApiResponse<EnderecoViacep>>(
+        `/viacep/${cepLimpo}`,
+      );
+      const endereco = response.data.data;
+
+      setFormulario((anterior) => ({
+        ...anterior,
+        endereco: {
+          ...anterior.endereco,
+          rua: endereco.rua || anterior.endereco.rua,
+          bairro: endereco.bairro || anterior.endereco.bairro,
+          cidade: endereco.cidade || anterior.endereco.cidade,
+          estado: endereco.estado || anterior.endereco.estado,
+          complemento:
+            endereco.complemento || anterior.endereco.complemento,
+        },
+      }));
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setBuscandoCep(false);
+    }
   };
 
   const validarFormulario = () => {
@@ -365,7 +409,16 @@ export function CadastroFornecedores() {
                 onChange={(event) =>
                   alterarEndereco('cep', event.target.value)
                 }
+                onBlur={buscarEnderecoPorCep}
               />
+              {buscandoCep ? (
+                <span className="label-s">Buscando CEP...</span>
+              ) : (
+                <span className="label-s">
+                  Ao sair do campo, o CEP preenche rua, bairro, cidade e
+                  estado.
+                </span>
+              )}
             </div>
 
             <div className="field">

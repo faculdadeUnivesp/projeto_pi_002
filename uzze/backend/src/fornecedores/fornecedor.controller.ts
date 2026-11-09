@@ -14,6 +14,8 @@ import { CreateFornecedorDto } from './dto/create-fornecedor.dto.js';
 import { UpdateFornecedorDto } from './dto/update-fornecedor.dto.js';
 import { FornecedoresService } from './fornecedor.service.js';
 import { FornecedorStatus } from './entities/fornecedor.entity.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
+import { UsuarioTipo } from '../usuarios/entities/usuario.entity.js';
 
 @Controller('fornecedores')
 export class FornecedoresController {
@@ -22,6 +24,7 @@ export class FornecedoresController {
   ) {}
 
   @Post()
+  @Roles(UsuarioTipo.ADMIN)
   create(@Body() createFornecedorDto: CreateFornecedorDto) {
     return this.fornecedoresService.create(createFornecedorDto);
   }
@@ -47,6 +50,7 @@ export class FornecedoresController {
   }
 
   @Patch(':id')
+  @Roles(UsuarioTipo.ADMIN)
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateFornecedorDto: UpdateFornecedorDto,
@@ -55,11 +59,13 @@ export class FornecedoresController {
   }
 
   @Delete(':id')
+  @Roles(UsuarioTipo.ADMIN)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.fornecedoresService.remove(id);
   }
 
   @Patch(':id/ativar')
+  @Roles(UsuarioTipo.ADMIN)
   activate(@Param('id', ParseUUIDPipe) id: string) {
     return this.fornecedoresService.activate(id);
   }

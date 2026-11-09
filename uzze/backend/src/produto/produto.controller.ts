@@ -27,6 +27,9 @@ import { ListProdutoQueryDto } from './dto/list-produto-query.dto.js';
 
 import { ProdutoService } from './produto.service.js';
 
+import { Roles } from '../auth/decorators/roles.decorator.js';
+import { UsuarioTipo } from '../usuarios/entities/usuario.entity.js';
+
 import type { UploadedFile as ProdutoUploadedFile } from './types/uploaded-file.type.js';
 
 const pastaProdutos =
@@ -43,6 +46,7 @@ export class ProdutoController {
   ) {}
 
   @Post()
+  @Roles(UsuarioTipo.ADMIN)
   @UseInterceptors(
     FileInterceptor(
       'imagem',
@@ -96,6 +100,7 @@ findOne(
 }
 
   @Patch(':id')
+  @Roles(UsuarioTipo.ADMIN)
   @UseInterceptors(
     FileInterceptor(
       'imagem',
@@ -125,6 +130,7 @@ findOne(
   }
 
   @Delete(':id')
+  @Roles(UsuarioTipo.ADMIN)
   remove(
     @Param(
       'id',
@@ -138,6 +144,7 @@ findOne(
   }
 
   @Patch(':id/ativar')
+  @Roles(UsuarioTipo.ADMIN)
   activate(
     @Param(
       'id',

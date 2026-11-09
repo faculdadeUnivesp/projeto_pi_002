@@ -298,6 +298,12 @@ export class FornecedoresService {
     const fornecedor =
       await this.findOne(id);
 
+    if (fornecedor.status === FornecedorStatus.INATIVO) {
+      throw new ConflictException(
+        'Fornecedor já se encontra inativo',
+      );
+    }
+
     fornecedor.status =
       FornecedorStatus.INATIVO;
 

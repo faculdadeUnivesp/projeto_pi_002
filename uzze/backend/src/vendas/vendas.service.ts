@@ -20,6 +20,7 @@ import { ItemVenda } from './entities/item-venda.entity.js';
 import { CreateVendaDto } from './dto/create-venda.dto.js';
 import { UsuarioTipo } from '../usuarios/entities/usuario.entity.js';
 import { Produto, ProdutoStatus } from '../produto/entities/produto.entity.js';
+import { Cliente } from '../clientes/entities/cliente.entity.js';
 import { buildMeta } from '../common/pagination.js';
 
 @Injectable()
@@ -33,6 +34,9 @@ export class VendasService {
 
     @InjectRepository(Produto)
     private readonly produtoRepository: Repository<Produto>,
+
+    @InjectRepository(Cliente)
+    private readonly clienteRepository: Repository<Cliente>,
 
     private readonly dataSource: DataSource,
   ) {}
@@ -60,6 +64,18 @@ export class VendasService {
       throw new BadRequestException(
         'Produto duplicado no pedido',
       );
+    }
+
+    if (dados.clienteId) {
+      const cliente = await this.clienteRepository.findOne({
+        where: { id: dados.clienteId },
+      });
+
+      if (!cliente) {
+        throw new NotFoundException(
+          'Cliente não encontrado',
+        );
+      }
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -158,6 +174,7 @@ export class VendasService {
       venda.data = new Date();
       venda.forma_pagamento = dados.formaPagamento;
       venda.vendedor_id = vendedorId;
+      venda.cliente_id = dados.clienteId ?? null;
       venda.total = total.toFixed(2);
       venda.status = VendaStatus.CONCLUIDA;
 
@@ -209,6 +226,7 @@ export class VendasService {
         'venda.data',
         'venda.forma_pagamento',
         'venda.vendedor_id',
+        'venda.cliente_id',
         'venda.total',
         'venda.status',
         'venda.created_at',
@@ -239,6 +257,7 @@ export class VendasService {
         data: venda.data,
         forma_pagamento: venda.forma_pagamento,
         vendedor_id: venda.vendedor_id,
+        cliente_id: venda.cliente_id,
         total: Number(venda.total),
         status: venda.status,
         created_at: venda.created_at,
@@ -278,6 +297,7 @@ export class VendasService {
       data: venda.data,
       forma_pagamento: venda.forma_pagamento,
       vendedor_id: venda.vendedor_id,
+      cliente_id: venda.cliente_id,
       total: Number(venda.total),
       status: venda.status,
       itens: venda.itens.map((item) => ({
