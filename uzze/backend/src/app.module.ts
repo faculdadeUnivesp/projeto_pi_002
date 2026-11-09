@@ -10,6 +10,8 @@ import { UsuariosModule } from './usuarios/usuarios.module.js';
 import { VendasModule } from './vendas/vendas.module.js';
 import { FornecedoresModule } from './fornecedores/fornecedor.module.js';
 import { ProdutoModule } from './produto/produto.module.js';
+import { ViacepModule } from './viacep/viacep.module.js';
+import { ClientesModule } from './clientes/clientes.module.js';
 
 @Module({
   imports: [
@@ -29,6 +31,8 @@ import { ProdutoModule } from './produto/produto.module.js';
     VendasModule,
     FornecedoresModule,
     ProdutoModule,
+    ViacepModule,
+    ClientesModule,
   ],
   controllers: [AppController],
   providers: [

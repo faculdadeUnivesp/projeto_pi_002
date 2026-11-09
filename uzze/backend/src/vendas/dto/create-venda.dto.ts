@@ -2,6 +2,7 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsUUID,
   Min,
   ValidateNested,
@@ -24,6 +25,10 @@ export class CreateVendaDto {
   @IsEnum(FormaPagamento)
   @IsNotEmpty()
   formaPagamento: FormaPagamento;
+
+  @IsOptional()
+  @IsUUID()
+  clienteId?: string;
 
   @ValidateNested({ each: true })
   @Type(() => ItemVendaDto)

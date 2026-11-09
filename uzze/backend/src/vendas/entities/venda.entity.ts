@@ -57,6 +57,14 @@ export class Venda {
   @JoinColumn({ name: 'vendedor_id' })
   vendedor: Usuario;
 
+  @Column({
+    name: 'cliente_id',
+    type: 'char',
+    length: 36,
+    nullable: true,
+  })
+  cliente_id: string | null;
+
   @OneToMany(() => ItemVenda, (item) => item.venda)
 itens: ItemVenda[];
 
