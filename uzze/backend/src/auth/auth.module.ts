@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import type { SignOptions } from 'jsonwebtoken';
+import { parseExpiresIn } from './jwt-expiration.js';
 import { AuthService } from './auth.service.js';
 import { AuthController } from './auth.controller.js';
 import { UsuariosModule } from '../usuarios/usuarios.module.js';
@@ -37,8 +37,7 @@ if (isProd) {
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: {
-        expiresIn: (process.env.JWT_EXPIRATION ||
-          '3600') as SignOptions['expiresIn'],
+        expiresIn: parseExpiresIn(process.env.JWT_EXPIRATION, 3600),
       },
     }),
   ],

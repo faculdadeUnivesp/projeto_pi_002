@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import type { SignOptions } from 'jsonwebtoken';
+import { parseExpiresIn } from './jwt-expiration.js';
 import { UsuariosService } from '../usuarios/usuarios.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { AlterarSenhaDto, UpdateMeDto } from './dto/me.dto.js';
@@ -129,10 +129,11 @@ export class AuthService {
   private async generateTokens(userId: string, email: string) {
     const payload = { sub: userId, email };
 
-    const accessExpiresIn = (process.env.JWT_EXPIRATION ||
-      '3600') as SignOptions['expiresIn'];
-    const refreshExpiresIn = (process.env.JWT_REFRESH_EXPIRATION ||
-      '604800') as SignOptions['expiresIn'];
+    const accessExpiresIn = parseExpiresIn(process.env.JWT_EXPIRATION, 3600);
+    const refreshExpiresIn = parseExpiresIn(
+      process.env.JWT_REFRESH_EXPIRATION,
+      604800,
+    );
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
